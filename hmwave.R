@@ -258,16 +258,34 @@ cex = c(rep(1, nrow(all.nroy)-1), 2)
   
 pairs(all.nroy, xlim = c(0,1), ylim = c(0,1), col = cols, cex = cex)
 
-nrow(test1$X.nroy)
-nrow(test2$X.nroy)
-nrow(test3$X.nroy)
-nrow(test4$X.nroy)
-nrow(test5$X.nroy)
-nrow(test6$X.nroy)
+# How large is the NROY space? 
+
+waves_list = list(test1, test2, test3, test4 ,test5, test6)
+
+PrintNroyProp = function(obj){
+  print(nrow(obj$X.nroy))
+}
+
+lapply(waves_list, FUN = PrintNroyProp)
+
+
 
 # Improvements to the above function from Andrianakis et al. (2015)
-# Reduce the range the emulator is fit over, as the waves continue.
-# Sample candidate design points from NEAR the existing NROY design points.
+# 1) Reduce the range the emulator is fit over, as the waves continue.
+# 2) Sample candidate design points from NEAR the existing NROY design points.
+
+# from Andrianakis et al. (2015): 
+# Suppose that in wave we have a number of non-implausible points. 
+# For each of these, we draw samples from a variate normal distribution 
+# that is centered on the value of the generating point. The wave 
+#implausibility is then evaluated on the new samples and the variance 
+# of the normal distribution is selected so that a small percentage of them
+# (around 20%) are non-implausible. The low acceptance rates should ensure 
+# that the new samples are sufficiently different from the old ones. This 
+# method can efficiently generate an adequate number of data points that 
+# can be used in subsequent waves.
+# A subset of the non-implausible samples drawn are then used to run the 
+# simulator and repeat another wave of history matching.
 
 
 
