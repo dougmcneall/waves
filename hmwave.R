@@ -86,7 +86,7 @@ run.model = function(X){
 
 create.kmfit.list = function(X, Y){
   # create a list of km fits for multivariate output
-  Y.list =  as.list(as.data.frame(Y))
+  Y.list = as.list(as.data.frame(Y))
   
   fit.list = NULL
   for(i in 1:length(Y.list)){
@@ -97,39 +97,50 @@ create.kmfit.list = function(X, Y){
   fit.list
 }
 
-
+# Are all the elements of a matrix row below a threshold?
 all.bt = function(x, thres) all(x < thres)
 
 
 # where is below the threshold for all cases?
 # initial design
-n = 10 # number of design points
+n = 10 # number of initial design points
 k = 4  # number of model inputs
 d = 3  # number of model outputs
+
+# simplest method is to choose a subset of the discovered NROY
+# points to append to the design
+n.app = 10 #
 
 X = maximinLHS(n, k = k,dup = 2)
 colnames(X) <- c('x1', 'x2', 'x3', 'x4')
 
-Y = matrix(NA, nrow = n, ncol = d)
-colnames(Y) <- c('y1', 'y2', 'y3')
 X.target = matrix(runif(4), nrow = 1)
 n.aug = 50000
 
-obs.sd.list = list(0,0,0)
+# run the model outside of the function
+Y = matrix(NA, nrow = n, ncol = d)
+colnames(Y) <- c('y1', 'y2', 'y3')
+Y = run.model(X)
+Y.target = run.model(X.target)
+
+# The standard deviation of the model output is approximately [5,5,1] and the
+# mean is around [12,8,2]
+
+obs.sd.list = list(0.5,0.5,0.1)
 disc.list = list(0,0,0)
-disc.sd.list = list(0.5, 0.5, 0.2) 
+disc.sd.list = list(0, 0, 0) 
 thres = 3
 
-add.nroy.design.points = function(X, X.target, n.aug,thres = 3, disc.list,
-                                  disc.sd.list){
+add.nroy.design.points = function(X, Y, Y.target, n.aug,thres = 3, disc.list,
+                                  disc.sd.list, obs.sd.list){
   
+  # Add NROY design points to a design, using uniform sampling from the
+  # entire input space.
   # Inputs
   # X            ...       design matrix (output from maximinLHS)    
+  # Y            ...       model output matrix
+  # Y.target     ...       Target output, or "observation"
   # n.aug        ...       number of candidate points to augment the lhs
-  
-  # could run the model outside of the function
-  Y = run.model(X)
-  Y.target = run.model(X.target)
   
   # list of fitted km objects, one list element for each output
   fit.list = create.kmfit.list(X=X, Y=Y)
@@ -147,6 +158,7 @@ add.nroy.design.points = function(X, X.target, n.aug,thres = 3, disc.list,
   # create a new set of candidate points
   #X.aug = augmentLHS(X, n.aug) # this will add to the current design.
   X.aug = samp.unif(n.aug, mins = rep(0,4), maxes = rep(1,4))
+  colnames(X.aug) = colnames(X)
   
   # predicting the output at each design point
   pred.list = lapply(fit.list, FUN = 'predict', newdata = X.aug, type = 'UK')
@@ -177,45 +189,58 @@ add.nroy.design.points = function(X, X.target, n.aug,thres = 3, disc.list,
               X.aug = X.aug, 
               impl.mat = impl.mat, 
               loo.mse.vec = loo.mse.vec,
-              fit.list
+              fit.list = fit.list
   )
   )
 }
 
-# Could find the implausibility at a large number of points and then
-# just choose a smaller number to append to the design.
-n.app = 20
 
-test1 = add.nroy.design.points(X = X, X.target = X.target, n.aug=n.aug, thres = 3,
-                               disc.list = disc.list,
-                               disc.sd.list = disc.sd.list)
+
+
+test1 = add.nroy.design.points(X = X, Y = Y, Y.target = Y.target, n.aug = n.aug, thres = 3,
+                               disc.list=disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
 X2 = rbind(X,test1$X.nroy[1:n.app, ])
-test2 = add.nroy.design.points(X = X2, X.target = X.target, n.aug=n.aug, thres = 3,
-                               disc.list = disc.list,
-                               disc.sd.list = disc.sd.list)
-X3 = rbind(X2, test2$X.nroy[1:n.app, ])
+Y2 = run.model(X2)
 
-test3 = add.nroy.design.points(X = X3, X.target = X.target, n.aug=n.aug, thres = 3,
+test2 = add.nroy.design.points(X = X2, Y = Y2, Y.target = Y.target, n.aug=n.aug, thres = 3,
                                disc.list = disc.list,
-                               disc.sd.list = disc.sd.list)
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+X3 = rbind(X2, test2$X.nroy[1:n.app, ])
+Y3 = run.model(X3)
+
+test3 = add.nroy.design.points(X = X3, Y = Y3, Y.target = Y.target, n.aug=n.aug, thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
 
 X4 = rbind(X3, test3$X.nroy[1:n.app, ])
+Y4 = run.model(X4)
 
-test4 = add.nroy.design.points(X = X4, X.target = X.target, n.aug=n.aug, thres = 3,
+test4 = add.nroy.design.points(X = X4, Y = Y4, Y.target = Y.target, n.aug=n.aug, thres = 3,
                                disc.list = disc.list,
-                               disc.sd.list = disc.sd.list)
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
 
 X5 = rbind(X4, test4$X.nroy[1:n.app, ])
+Y5 = run.model(X5)
 
-test5 = add.nroy.design.points(X = X5, X.target = X.target, n.aug=n.aug, thres = 3,
+test5 = add.nroy.design.points(X = X5, Y = Y5, Y.target = Y.target, n.aug=n.aug, thres = 3,
                                disc.list = disc.list,
-                               disc.sd.list = disc.sd.list)
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
 
 X6 = rbind(X5, test5$X.nroy[1:n.app, ])
+Y6 = run.model(X6)
 
-test6 = add.nroy.design.points(X = X6, X.target = X.target, n.aug=n.aug, thres = 3,
+test6 = add.nroy.design.points(X = X6, Y = Y6, Y.target = Y.target, n.aug=n.aug, thres = 3,
                                disc.list = disc.list,
-                               disc.sd.list = disc.sd.list)
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
 
 
 all.nroy = rbind(test1$X.nroy, test2$X.nroy, test3$X.nroy, test4$X.nroy, test5$X.nroy, test6$X.nroy, X.target)
@@ -240,9 +265,10 @@ nrow(test4$X.nroy)
 nrow(test5$X.nroy)
 nrow(test6$X.nroy)
 
-hm.waves = function(X, nwav){
-  
-}
+# Improvements to the above function from Andrianakis et al. (2015)
+# Reduce the range the emulator is fit over, as the waves continue.
+# Sample candidate design points from NEAR the existing NROY design points.
+
 
 
 
