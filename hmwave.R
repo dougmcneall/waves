@@ -100,6 +100,25 @@ create.kmfit.list = function(X, Y){
 # Are all the elements of a matrix row below a threshold?
 all.bt = function(x, thres) all(x < thres)
 
+ChooseMaximinNroy = function(n.app, waveobj, nreps){
+  # Choose a set of NROY points with the largest minimum
+  # distance
+  ix.list = vector(mode='list', length = nreps)
+  mindist.vec = rep(NA, nreps)
+  
+  for(i in 1:nreps){
+    ix = sample(1:nrow(waveobj$X.nroy), n.app)
+    X.cand = waveobj$X.nroy[ix, ]
+    ix.list[[i]] = ix
+    mindist = min(dist( X.cand))
+    mindist.vec[i] = mindist
+  }
+  ix.chosen = ix.list[[which.max(mindist.vec)]]
+  
+  return(waveobj$X.nroy[ix.chosen, ])
+}
+
+
 
 # where is below the threshold for all cases?
 # initial design
@@ -126,7 +145,7 @@ Y.target = run.model(X.target)
 # The standard deviation of the model output is approximately [5,5,1] and the
 # mean is around [12,8,2]
 
-obs.sd.list = list(0.5,0.5,0.1)
+obs.sd.list = list(0.5,0.5,0.2)
 disc.list = list(0,0,0)
 disc.sd.list = list(0, 0, 0) 
 thres = 3
@@ -197,88 +216,60 @@ add.nroy.design.points = function(X, Y, Y.target, n.aug,thres = 3, disc.list,
 
 
 
-test1 = add.nroy.design.points(X = X, Y = Y, Y.target = Y.target, n.aug = n.aug, thres = 3,
+wave1 = add.nroy.design.points(X = X, Y = Y, Y.target = Y.target, n.aug = n.aug, thres = 3,
                                disc.list=disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-
-# At this point, we can draw a number of samples from the nroy space
-ChooseMaximinNroy = function(n.app, waveobj, nreps){
-  # Choose a set of NROY points with the largest minimum
-  # distance
-  ix.list = vector(mode='list', length = nreps)
-  mindist.vec = rep(NA, nreps)
-  
-  for(i in 1:nreps){
-    ix = sample(1:nrow(waveobj$X.nroy), n.app)
-    X.cand = waveobj$X.nroy[ix, ]
-    ix.list[[i]] = ix
-    mindist = min(dist( X.cand))
-    mindist.vec[i] = mindist
-  }
-  ix.chosen = ix.list[[which.max(mindist.vec)]]
-  
-  return(waveobj$X.nroy[ix.chosen, ])
-}
-
-ChooseMaximinNroy(n.app = 10, waveobj=test1, nreps = 30 )
-
-
-X.cand.ix = sample(x=1:nrow(test1$X.nroy), size = n.app)
-X.cand.dist = dist(test1$X.nroy[X.cand.ix, ])
-  
-  test1$X.nroy[1:n.app, ]
-
-X2 = rbind(X,test1$X.nroy[1:n.app, ])
+X2 = rbind(X,ChooseMaximinNroy(n.app = n.app, waveobj=wave1, nreps = 1000))
 Y2 = run.model(X2)
 
-test2 = add.nroy.design.points(X = X2, Y = Y2, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave2 = add.nroy.design.points(X = X2, Y = Y2, Y.target = Y.target, n.aug=n.aug, thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-X3 = rbind(X2, test2$X.nroy[1:n.app, ])
+X3 = rbind(X2, ChooseMaximinNroy(n.app = n.app, waveobj=wave2, nreps = 1000))
 Y3 = run.model(X3)
 
-test3 = add.nroy.design.points(X = X3, Y = Y3, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave3 = add.nroy.design.points(X = X3, Y = Y3, Y.target = Y.target, n.aug=n.aug, thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-X4 = rbind(X3, test3$X.nroy[1:n.app, ])
+X4 = rbind(X3, ChooseMaximinNroy(n.app = n.app, waveobj=wave3, nreps = 1000))
 Y4 = run.model(X4)
 
-test4 = add.nroy.design.points(X = X4, Y = Y4, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave4 = add.nroy.design.points(X = X4, Y = Y4, Y.target = Y.target, n.aug=n.aug, thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-X5 = rbind(X4, test4$X.nroy[1:n.app, ])
+X5 = rbind(X4, ChooseMaximinNroy(n.app = n.app, waveobj=wave4, nreps = 1000))
 Y5 = run.model(X5)
 
-test5 = add.nroy.design.points(X = X5, Y = Y5, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave5 = add.nroy.design.points(X = X5, Y = Y5, Y.target = Y.target, n.aug=n.aug, thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-X6 = rbind(X5, test5$X.nroy[1:n.app, ])
+X6 = rbind(X5, ChooseMaximinNroy(n.app = n.app, waveobj=wave5, nreps = 1000))
 Y6 = run.model(X6)
 
-test6 = add.nroy.design.points(X = X6, Y = Y6, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave6 = add.nroy.design.points(X = X6, Y = Y6, Y.target = Y.target, n.aug=n.aug, thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
 
-all.nroy = rbind(test1$X.nroy, test2$X.nroy, test3$X.nroy, test4$X.nroy, test5$X.nroy, test6$X.nroy, X.target)
+all.nroy = rbind(wave1$X.nroy, wave2$X.nroy, wave3$X.nroy, wave4$X.nroy, wave5$X.nroy, wave6$X.nroy, X.target)
 
-cols = c(rep('black',nrow(test1$X.nroy)), 
-         rep('red',nrow(test2$X.nroy)),
-         rep('purple',nrow(test3$X.nroy)),
-         rep('green',nrow(test4$X.nroy)),
-         rep('grey',nrow(test5$X.nroy)),
-         rep('blue',nrow(test6$X.nroy)),
+cols = c(rep('black',nrow(wave1$X.nroy)), 
+         rep('red',nrow(wave2$X.nroy)),
+         rep('purple',nrow(wave3$X.nroy)),
+         rep('green',nrow(wave4$X.nroy)),
+         rep('grey',nrow(wave5$X.nroy)),
+         rep('blue',nrow(wave6$X.nroy)),
           rep('gold', 1)
          
 )
@@ -288,7 +279,7 @@ pairs(all.nroy, xlim = c(0,1), ylim = c(0,1), col = cols, cex = cex)
 
 # How large is the NROY space? 
 
-waves_list = list(test1, test2, test3, test4 ,test5, test6)
+waves_list = list(wave1, wave2, wave3, wave4 ,wave5, wave6)
 
 PrintNroyProp = function(obj){
   print(nrow(obj$X.nroy))
@@ -375,12 +366,12 @@ GenerateNroyMvn = function(x, n.cand, Sigma, fit.list, Y.target,
 
 # Generate mvrnorm
 Sigma = diag(0.05, 4, 4)
-x = test1$X.nroy[1,]
+x = wave1$X.nroy[1,]
 
 p = GenerateNroyMvn(x=x,
                     n.cand = 1000,
                     Sigma=Sigma,
-                    fit.list = test1$fit.list,
+                    fit.list = wave1$fit.list,
                     Y.target=Y.target,
                     disc.list=disc.list,
                     disc.sd.list=disc.sd.list,
@@ -398,7 +389,7 @@ GenerateNroyMvnOptimWrap = function(v, x, n.cand, fit.list, Y.target,
   p = GenerateNroyMvn(x=x,
                       n.cand = 1000,
                       Sigma=Sigma,
-                      fit.list = test1$fit.list,
+                      fit.list = wave1$fit.list,
                       Y.target=Y.target,
                       disc.list=disc.list,
                       disc.sd.list=disc.sd.list,
@@ -411,7 +402,7 @@ GenerateNroyMvnOptimWrap = function(v, x, n.cand, fit.list, Y.target,
 test = GenerateNroyMvnOptimWrap(v = rep(0.05,4),
                     x=x,
                     n.cand = 1000,
-                    fit.list = test1$fit.list,
+                    fit.list = wave1$fit.list,
                     Y.target=Y.target,
                     disc.list=disc.list,
                     disc.sd.list=disc.sd.list,
@@ -423,7 +414,7 @@ test = GenerateNroyMvnOptimWrap(v = rep(0.05,4),
 op = optim(par=rep(0.05,4), fn = GenerateNroyMvnOptimWrap,     
            x=x,
            n.cand = 10000,
-           fit.list = test1$fit.list,
+           fit.list = wave1$fit.list,
            Y.target=Y.target,
            disc.list=disc.list,
            disc.sd.list=disc.sd.list,
