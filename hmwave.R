@@ -202,6 +202,34 @@ test1 = add.nroy.design.points(X = X, Y = Y, Y.target = Y.target, n.aug = n.aug,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
+
+# At this point, we can draw a number of samples from the nroy space
+ChooseMaximinNroy = function(n.app, waveobj, nreps){
+  # Choose a set of NROY points with the largest minimum
+  # distance
+  ix.list = vector(mode='list', length = nreps)
+  mindist.vec = rep(NA, nreps)
+  
+  for(i in 1:nreps){
+    ix = sample(1:nrow(waveobj$X.nroy), n.app)
+    X.cand = waveobj$X.nroy[ix, ]
+    ix.list[[i]] = ix
+    mindist = min(dist( X.cand))
+    mindist.vec[i] = mindist
+  }
+  ix.chosen = ix.list[[which.max(mindist.vec)]]
+  
+  return(waveobj$X.nroy[ix.chosen, ])
+}
+
+ChooseMaximinNroy(n.app = 10, waveobj=test1, nreps = 30 )
+
+
+X.cand.ix = sample(x=1:nrow(test1$X.nroy), size = n.app)
+X.cand.dist = dist(test1$X.nroy[X.cand.ix, ])
+  
+  test1$X.nroy[1:n.app, ]
+
 X2 = rbind(X,test1$X.nroy[1:n.app, ])
 Y2 = run.model(X2)
 
@@ -394,7 +422,7 @@ test = GenerateNroyMvnOptimWrap(v = rep(0.05,4),
 
 op = optim(par=rep(0.05,4), fn = GenerateNroyMvnOptimWrap,     
            x=x,
-           n.cand = 1000,
+           n.cand = 10000,
            fit.list = test1$fit.list,
            Y.target=Y.target,
            disc.list=disc.list,
@@ -403,9 +431,8 @@ op = optim(par=rep(0.05,4), fn = GenerateNroyMvnOptimWrap,
            thres=3,
            control = list(trace = 10),
            method = "L-BFGS-B",
-           lower = 0.01, 
-           upper = 1
-           
+           lower = 0.001, 
+           upper = 5
            )
 
 
