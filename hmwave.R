@@ -288,6 +288,206 @@ lapply(waves_list, FUN = PrintNroyProp)
 # simulator and repeat another wave of history matching.
 
 
+# New function to add candidate points, efficiently in NROY space.
+
+# 
+# 1) generate multivariate normal points around current design points
+# 2) Check acceptance rate (prop)
+# 3) Repeat until acceptance rate is around 20%
+
+
+
+
+# function output needs to be fraction of NROY points, in order to optimise.
+# Inputs need to be the standard deviation (i.e. the diagonal of the covariance matrix),
+# the set of inputs and the outputs (or the emulator object) 
+
+GenerateNroyMvn = function(x, n.cand, Sigma, fit.list, Y.target,
+                           disc.list,
+                           disc.sd.list,
+                           obs.sd.list,
+                           thres) {
+  
+  # takes fit, a DiceKriging fit
+  # Generate a candidate set of input points, with the aim of keeping
+  # a small number of them.
+  # This is pretty fast, as the DiceKriging fit is already done
+  X.cand = mvrnorm(n = n.cand, mu = x, Sigma = Sigma)
+  # x is the NROY point we have so far
+  
+  # predicting the output at each design point
+  pred.list = lapply(fit.list, FUN = 'predict', newdata = X.cand, type = 'UK')
+  # calculate the implausibility at each design point
+  
+  impl.mat = NULL
+  for(i in 1:length(pred.list)){
+    
+    pred.impl = impl(em = pred.list[[i]]$mean,
+                     em.sd = pred.list[[i]]$sd,
+                     disc = disc.list[[i]],
+                     disc.sd = disc.sd.list[[i]],
+                     obs = Y.target[[i]],
+                     obs.sd = obs.sd.list[[i]])
+    
+    impl.mat = cbind(impl.mat, pred.impl)
+  }
+  
+  nroy.tf = apply(impl.mat, 1, FUN = all.bt, thres = thres)
+  nroy.ix = which(nroy.tf==TRUE)
+  X.nroy = X.cand[nroy.ix, ]
+  
+  prop.nroy = nrow(X.nroy) / n.cand
+  
+  return(list(prop.nroy = prop.nroy))
+  # Find the proportion of NROY
+ 
+}
+
+# first, find the NROY points in the first wave
+
+# Generate mvrnorm
+Sigma = diag(0.05, 4, 4)
+x = test1$X.nroy[1,]
+
+p = GenerateNroyMvn(x=x,
+                    n.cand = 1000,
+                    Sigma=Sigma,
+                    fit.list = test1$fit.list,
+                    Y.target=Y.target,
+                    disc.list=disc.list,
+                    disc.sd.list=disc.sd.list,
+                    obs.sd.list=obs.sd.list,
+                    thres=3)
+
+GenerateNroyMvnOptimWrap = function(v, x, n.cand, fit.list, Y.target,
+                                    disc.list,
+                                    disc.sd.list,
+                                    obs.sd.list,
+                                    thres){
+  
+  Sigma = diag(v, length(v), length(v))
+  
+  p = GenerateNroyMvn(x=x,
+                      n.cand = 1000,
+                      Sigma=Sigma,
+                      fit.list = test1$fit.list,
+                      Y.target=Y.target,
+                      disc.list=disc.list,
+                      disc.sd.list=disc.sd.list,
+                      obs.sd.list=obs.sd.list,
+                      thres=3)
+  out = p$prop.nroy - 0.2 
+  out
+}
+
+test = GenerateNroyMvnOptimWrap(v = rep(0.05,4),
+                    x=x,
+                    n.cand = 1000,
+                    fit.list = test1$fit.list,
+                    Y.target=Y.target,
+                    disc.list=disc.list,
+                    disc.sd.list=disc.sd.list,
+                    obs.sd.list=obs.sd.list,
+                    thres=3)
+
+# Optimize the variances to get a 20% proportion returned
+
+op = optim(par=rep(0.05,4), fn = GenerateNroyMvnOptimWrap,     
+           x=x,
+           n.cand = 1000,
+           fit.list = test1$fit.list,
+           Y.target=Y.target,
+           disc.list=disc.list,
+           disc.sd.list=disc.sd.list,
+           obs.sd.list=obs.sd.list,
+           thres=3,
+           control = list(trace = 10),
+           method = "L-BFGS-B",
+           lower = 0.01, 
+           upper = 1
+           
+           )
+
+
+
+
+
+
+AddDesignPoints = function(X, Y, Y.target, n.aug, thres = 3,
+                                  disc.list, disc.sd.list, obs.sd.list){
+  
+  # Add NROY design points to a design, using uniform sampling from the
+  # entire input space.
+  # Inputs
+  # X            ...       design matrix (output from maximinLHS)    
+  # Y            ...       model output matrix
+  # Y.target     ...       Target output, or "observation"
+  # n.aug        ...       number of candidate points to augment the lhs
+  
+  # list of fitted km objects, one list element for each output
+  fit.list = create.kmfit.list(X=X, Y=Y)
+  
+  # How good is the fit?
+  loo.list = lapply(fit.list, FUN = leaveOneOut.km, type = 'UK', trend.reestim = TRUE)
+  
+  loo.mse.vec = rep(NA, length(loo.list))
+  for(i in 1:length(loo.list)){
+    
+    loo.mse = mean((loo.list[[i]]$mean - Y.target[,i])^2)
+    loo.mse.vec[i] = loo.mse
+  }
+  
+  # create a new set of candidate points
+  
+  for(i in 1: length(fit.list)){
+    
+    
+    
+    
+  }
+  
+  
+  
+  #X.aug = augmentLHS(X, n.aug) # this will add to the current design.
+  X.aug = samp.unif(n.aug, mins = rep(0,4), maxes = rep(1,4))
+  colnames(X.aug) = colnames(X)
+  
+  # predicting the output at each design point
+  pred.list = lapply(fit.list, FUN = 'predict', newdata = X.aug, type = 'UK')
+  # calculate the implausibility at each design point
+  
+  impl.mat = NULL
+  for(i in 1:length(pred.list)){
+    
+    pred.impl = impl(em = pred.list[[i]]$mean,
+                     em.sd = pred.list[[i]]$sd,
+                     disc = disc.list[[i]],
+                     disc.sd = disc.sd.list[[i]],
+                     obs = Y.target[[i]],
+                     obs.sd = obs.sd.list[[i]])
+    
+    impl.mat = cbind(impl.mat, pred.impl)
+  }
+  
+  # Which of the candidte design points are NROY?
+  
+  # create a matrix of the implausibility measures
+  # find the indices of the matrix where all are below the threshold.
+  nroy.tf = apply(impl.mat, 1, FUN = all.bt, thres = thres)
+  nroy.ix = which(nroy.tf==TRUE)
+  X.nroy = X.aug[nroy.ix, ]
+  
+  return(list(X.nroy = X.nroy,
+              X.aug = X.aug, 
+              impl.mat = impl.mat, 
+              loo.mse.vec = loo.mse.vec,
+              fit.list = fit.list
+  )
+  )
+}
+
+
+
 
 
 
