@@ -150,7 +150,16 @@ disc.list = list(0,0,0)
 disc.sd.list = list(0, 0, 0) 
 thres = 3
 
-add.nroy.design.points = function(X, Y, Y.target, n.aug,thres = 3, disc.list,
+mins.aug = rep(0,4)
+maxes.aug = rep(1,4)
+
+# Improvements to the above function from Andrianakis et al. (2015)
+# 1) Reduce the range the emulator is fit over, as the waves continue.
+# 2) Sample candidate design points from NEAR the existing NROY design points.
+
+add.nroy.design.points = function(X, Y, Y.target, n.aug,
+                                  mins.aug, maxes.aug,
+                                  thres = 3, disc.list,
                                   disc.sd.list, obs.sd.list){
   
   # Add NROY design points to a design, using uniform sampling from the
@@ -160,6 +169,8 @@ add.nroy.design.points = function(X, Y, Y.target, n.aug,thres = 3, disc.list,
   # Y            ...       model output matrix
   # Y.target     ...       Target output, or "observation"
   # n.aug        ...       number of candidate points to augment the lhs
+  # mins.aug
+  # maxes.aug    ...       Limits on the candidate points
   
   # list of fitted km objects, one list element for each output
   fit.list = create.kmfit.list(X=X, Y=Y)
@@ -176,7 +187,7 @@ add.nroy.design.points = function(X, Y, Y.target, n.aug,thres = 3, disc.list,
   
   # create a new set of candidate points
   #X.aug = augmentLHS(X, n.aug) # this will add to the current design.
-  X.aug = samp.unif(n.aug, mins = rep(0,4), maxes = rep(1,4))
+  X.aug = samp.unif(n.aug, mins = mins.aug, maxes = maxes.aug)
   colnames(X.aug) = colnames(X)
   
   # predicting the output at each design point
@@ -204,59 +215,131 @@ add.nroy.design.points = function(X, Y, Y.target, n.aug,thres = 3, disc.list,
   nroy.ix = which(nroy.tf==TRUE)
   X.nroy = X.aug[nroy.ix, ]
   
+  X.nroy.max = apply(X.nroy, 2, max)
+  X.nroy.min = apply(X.nroy, 2, min)
+  
   return(list(X.nroy = X.nroy,
               X.aug = X.aug, 
               impl.mat = impl.mat, 
               loo.mse.vec = loo.mse.vec,
-              fit.list = fit.list
-  )
+              fit.list = fit.list,
+              X.nroy.max = X.nroy.max,
+              X.nroy.min = X.nroy.min)
   )
 }
 
 
 
 
-wave1 = add.nroy.design.points(X = X, Y = Y, Y.target = Y.target, n.aug = n.aug, thres = 3,
+wave1 = add.nroy.design.points(X = X, 
+                               Y = Y, 
+                               Y.target = Y.target,
+                               n.aug = n.aug, 
+                               mins.aug = mins.aug,
+                               maxes.aug = maxes.aug,
+                               thres = 3,
                                disc.list=disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-X2 = rbind(X,ChooseMaximinNroy(n.app = n.app, waveobj=wave1, nreps = 1000))
+# Exclude any design points outside of the ranges returned as NROY
+
+
+
+WithinRange = function(x, maxes, mins){
+  # which elements of a vector are between
+  # elements of the min and max vectors?
+  
+  all(x < maxes && x > mins)
+}
+
+keep1.ix = which(apply(X, FUN = WithinRange,1,
+                      maxes = wave1$X.nroy.max,
+                      mins = wave1$X.nroy.min))
+
+X2 = rbind(X[keep1.ix, ] , ChooseMaximinNroy(n.app = n.app, waveobj=wave1, nreps = 10000))
 Y2 = run.model(X2)
 
-wave2 = add.nroy.design.points(X = X2, Y = Y2, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave2 = add.nroy.design.points(X = X2,
+                               Y = Y2, 
+                               Y.target = Y.target,
+                               n.aug=n.aug,
+                               mins.aug = wave1$X.nroy.min,
+                               maxes.aug = wave1$X.nroy.max,
+                               thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-X3 = rbind(X2, ChooseMaximinNroy(n.app = n.app, waveobj=wave2, nreps = 1000))
+keep2.ix = which(apply(X2, FUN = WithinRange,1,
+                       maxes = wave2$X.nroy.max,
+                       mins = wave2$X.nroy.min))
+
+X3 = rbind(X2[keep2.ix, ], ChooseMaximinNroy(n.app = n.app, waveobj=wave2, nreps = 10000))
 Y3 = run.model(X3)
 
-wave3 = add.nroy.design.points(X = X3, Y = Y3, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave3 = add.nroy.design.points(X = X3, Y = Y3, Y.target = Y.target, n.aug=n.aug,
+                               mins.aug = wave2$X.nroy.min,
+                               maxes.aug = wave2$X.nroy.max,
+                               thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-X4 = rbind(X3, ChooseMaximinNroy(n.app = n.app, waveobj=wave3, nreps = 1000))
+keep3.ix = which(apply(X3, FUN = WithinRange,1,
+                       maxes = wave3$X.nroy.max,
+                       mins = wave3$X.nroy.min))
+
+X4 = rbind(X3[keep3.ix, ],
+           ChooseMaximinNroy(n.app = n.app, waveobj=wave3, nreps = 10000))
+
 Y4 = run.model(X4)
 
-wave4 = add.nroy.design.points(X = X4, Y = Y4, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave4 = add.nroy.design.points(X = X4, 
+                               Y = Y4,
+                               Y.target = Y.target,
+                               n.aug=n.aug,
+                               mins.aug = wave3$X.nroy.min,
+                               maxes.aug = wave3$X.nroy.max,
+                               thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-X5 = rbind(X4, ChooseMaximinNroy(n.app = n.app, waveobj=wave4, nreps = 1000))
+keep4.ix = which(apply(X4, FUN = WithinRange,1,
+                       maxes = wave4$X.nroy.max,
+                       mins = wave4$X.nroy.min))
+
+X5 = rbind(X4[keep4.ix, ],
+           ChooseMaximinNroy(n.app = n.app, waveobj=wave4, nreps = 10000))
+
 Y5 = run.model(X5)
 
-wave5 = add.nroy.design.points(X = X5, Y = Y5, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave5 = add.nroy.design.points(X = X5,
+                               Y = Y5,
+                               Y.target = Y.target,
+                               n.aug=n.aug, 
+                               mins.aug = wave4$X.nroy.min,
+                               maxes.aug = wave4$X.nroy.max,
+                               thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-X6 = rbind(X5, ChooseMaximinNroy(n.app = n.app, waveobj=wave5, nreps = 1000))
+keep5.ix = which(apply(X5, FUN = WithinRange,1,
+                       maxes = wave5$X.nroy.max,
+                       mins = wave5$X.nroy.min))
+
+X6 = rbind(X5[keep5.ix, ], ChooseMaximinNroy(n.app = n.app, waveobj=wave5, nreps = 10000))
 Y6 = run.model(X6)
 
-wave6 = add.nroy.design.points(X = X6, Y = Y6, Y.target = Y.target, n.aug=n.aug, thres = 3,
+wave6 = add.nroy.design.points(X = X6,
+                               Y = Y6,
+                               Y.target = Y.target, 
+                               n.aug=n.aug, 
+                               mins.aug = wave5$X.nroy.min,
+                               maxes.aug = wave5$X.nroy.max,
+                               thres = 3,
                                disc.list = disc.list,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
@@ -289,9 +372,8 @@ lapply(waves_list, FUN = PrintNroyProp)
 
 
 
-# Improvements to the above function from Andrianakis et al. (2015)
-# 1) Reduce the range the emulator is fit over, as the waves continue.
-# 2) Sample candidate design points from NEAR the existing NROY design points.
+
+
 
 # from Andrianakis et al. (2015): 
 # Suppose that in wave we have a number of non-implausible points. 
@@ -327,6 +409,10 @@ GenerateNroyMvn = function(x, n.cand, Sigma, fit.list, Y.target,
                            obs.sd.list,
                            thres) {
   
+  # I can't make the optimisation work - try
+  # with a single value of sigma
+  
+  #Sigma = diag(rep(sigma, 4), 4, 4)
   # takes fit, a DiceKriging fit
   # Generate a candidate set of input points, with the aim of keeping
   # a small number of them.
@@ -366,6 +452,7 @@ GenerateNroyMvn = function(x, n.cand, Sigma, fit.list, Y.target,
 
 # Generate mvrnorm
 Sigma = diag(0.05, 4, 4)
+#sigma = 0.05
 x = wave1$X.nroy[1,]
 
 p = GenerateNroyMvn(x=x,
@@ -387,9 +474,9 @@ GenerateNroyMvnOptimWrap = function(v, x, n.cand, fit.list, Y.target,
   Sigma = diag(v, length(v), length(v))
   
   p = GenerateNroyMvn(x=x,
-                      n.cand = 1000,
+                      n.cand = n.cand,
                       Sigma=Sigma,
-                      fit.list = wave1$fit.list,
+                      fit.list = fit.list,
                       Y.target=Y.target,
                       disc.list=disc.list,
                       disc.sd.list=disc.sd.list,
@@ -399,10 +486,11 @@ GenerateNroyMvnOptimWrap = function(v, x, n.cand, fit.list, Y.target,
   out
 }
 
-test = GenerateNroyMvnOptimWrap(v = rep(0.05,4),
+test = GenerateNroyMvnOptimWrap(v = rep(10,4),
                     x=x,
-                    n.cand = 1000,
+                    n.cand = 10000,
                     fit.list = wave1$fit.list,
+                    #Sigma = Sigma,
                     Y.target=Y.target,
                     disc.list=disc.list,
                     disc.sd.list=disc.sd.list,
@@ -411,7 +499,7 @@ test = GenerateNroyMvnOptimWrap(v = rep(0.05,4),
 
 # Optimize the variances to get a 20% proportion returned
 
-op = optim(par=rep(0.05,4), fn = GenerateNroyMvnOptimWrap,     
+op = optim(par=rep(10,4), fn = GenerateNroyMvnOptimWrap,     
            x=x,
            n.cand = 10000,
            fit.list = wave1$fit.list,
@@ -420,10 +508,8 @@ op = optim(par=rep(0.05,4), fn = GenerateNroyMvnOptimWrap,
            disc.sd.list=disc.sd.list,
            obs.sd.list=obs.sd.list,
            thres=3,
-           control = list(trace = 10),
-           method = "L-BFGS-B",
-           lower = 0.001, 
-           upper = 5
+           control = list(trace = 100),
+           method = "SANN"
            )
 
 
