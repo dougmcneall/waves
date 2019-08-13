@@ -378,45 +378,6 @@ lapply(waves_list, FUN = PrintNroyProp)
 
 # Minimum Implausibility and Optical Depth plots.
 
-# Both plots rely on a grid for each x1 x2
-taat.design = function(X, n, means = NULL){
-  # Build a two at a time emulator design
-  # hold all of the other parameters at their mid values
-  
-  maxes <- apply(X, 2, max)
-  mins  <- apply(X, 2, min)
-  
-  if(is.null(means)) means <- apply(X, 2, mean)
-  
-  nip <- ncol(X) # number of input parameters
-  
-  col.ix <- combn(1:nip,2)
-  
-  em.vec <- seq(from = 0, to = 1, length.out = n)
-  
-  des.cols <- expand.grid(em.vec, em.vec)
-  
-  holder <- matrix(means, ncol = nip, nrow = nrow(des.cols), byrow = TRUE)
-  
-  out <- NULL
-  
-  for(i in 1:ncol(col.ix)){
-    
-    mat.part <- holder
-    
-    colu <- col.ix[,i]
-    
-    mat.part[, as.matrix(colu[1])] <- des.cols[,1]
-    mat.part[, as.matrix(colu[2])] <- des.cols[,2]
-    
-    out <- rbind(out, mat.part)
-    
-  }
-  
-  return(list(des = out, ix = col.ix))
-  
-}
-
 
 # Could use various strategies:
 
@@ -440,6 +401,8 @@ TaatRandomDesign = function(X, n, reps, mins, maxes){
   col.ix <- combn(1:nip,2)
   
   out <- NULL
+  
+ # des.nonrep <- NULL
   
   for(i in 1:ncol(col.ix)){
   
@@ -473,14 +436,76 @@ TaatRandomDesign = function(X, n, reps, mins, maxes){
     mat.part[, as.matrix(colu[1])] <- des.cols.rep[,1]
     mat.part[, as.matrix(colu[2])] <- des.cols.rep[,2]
     
+    #des.nonrep <- rbind(des.nonrep, des.cols)
+    
     out <- rbind(out, mat.part)
     
   }
-  out
+  
+  return(list(des = out, ix = col.ix))
   
 }
   
-test = TaatRandomDesign(X, n = 3, reps = 3, mins = c(0,0,0,0), maxes = c(1,1,1,0.6))
+
+n = 15
+reps = 20
+taat.random = TaatRandomDesign(X6,
+                               n = n, 
+                               reps = reps,
+                               mins = rep(0,4),
+                               maxes = rep(1,4)
+                               )
+
+
+pred1 = predict(wave6$fit.list[[1]], newdata = taat.random$des, type = 'UK')
+
+impl1 = impl(em = pred1$mean,
+             em.sd = pred1$sd, 
+             disc = disc.list[[1]],
+             disc.sd = disc.sd.list[[1]],
+             obs = Y.target[1],
+             obs.sd = obs.sd.list[[1]])
+
+blues = brewer.pal(9, 'Blues')
+
+cplot(x = taat.random$des[1:(reps*n^2), 1 ], y = taat.random$des[1:(reps*n^2), 2 ], z = impl1,
+      cols = blues, pch = 20)
+
+# OK, now extract the minimum implausibility at each point.
+
+# A function for doing so:
+
+repmat = matrix(impl1 , nrow = reps) # each column contains the reps.
+minvec = apply(repmat,2,min) # now this minvec has the same ordering as col.ix
+
+# The shortcut is just to sample every (reps), rather than outputting another matrix
+cplot(x = taat.random$des[seq(from = 1, to = reps*n^2, by = reps), 1 ],
+      y = taat.random$des[seq(from = 1, to = reps*n^2, by = reps), 2 ], z = minvec,
+           cols = blues, pch = 20, cex = 3)
+
+
+
+ExtractMinImp = function(taat, n, reps){
+  
+  # the map (order) for the columns we are looking at is in taat$ix
+  # Each block of (reps * n^2) has n reps, so we can sample every reps within that
+  
+  
+  
+}
+
+
+
+
+
+                              # mins = apply(X6,2,min), 
+                              # maxes = apply(X6,2,max))
+
+# Build predictions using emulators from the last wave.
+
+# The first reps*n^2 will from col.ix[,1] etc.
+
+# to plot this, we 
 
 # from Andrianakis et al. (2015): 
 # Suppose that in wave we have a number of non-implausible points. 
