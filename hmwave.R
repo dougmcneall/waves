@@ -134,7 +134,6 @@ X = maximinLHS(n, k = k,dup = 2)
 colnames(X) <- c('x1', 'x2', 'x3', 'x4')
 
 X.target = matrix(runif(4), nrow = 1)
-n.aug = 50000
 
 # run the model outside of the function
 Y = matrix(NA, nrow = n, ncol = d)
@@ -145,7 +144,7 @@ Y.target = run.model(X.target)
 # The standard deviation of the model output is approximately [5,5,1] and the
 # mean is around [12,8,2]
 
-obs.sd.list = list(0.5,0.5,0.2)
+obs.sd.list = list(0.2,0.2,0.1)
 disc.list = list(0,0,0)
 disc.sd.list = list(0, 0, 0) 
 thres = 3
@@ -234,7 +233,7 @@ add.nroy.design.points = function(X, Y, Y.target, n.aug,
 wave1 = add.nroy.design.points(X = X, 
                                Y = Y, 
                                Y.target = Y.target,
-                               n.aug = n.aug, 
+                               n.aug = 50000, 
                                mins.aug = mins.aug,
                                maxes.aug = maxes.aug,
                                thres = 3,
@@ -263,7 +262,7 @@ Y2 = run.model(X2)
 wave2 = add.nroy.design.points(X = X2,
                                Y = Y2, 
                                Y.target = Y.target,
-                               n.aug=n.aug,
+                               n.aug = 30000,
                                mins.aug = wave1$X.nroy.min,
                                maxes.aug = wave1$X.nroy.max,
                                thres = 3,
@@ -278,7 +277,10 @@ keep2.ix = which(apply(X2, FUN = WithinRange,1,
 X3 = rbind(X2[keep2.ix, ], ChooseMaximinNroy(n.app = n.app, waveobj=wave2, nreps = 10000))
 Y3 = run.model(X3)
 
-wave3 = add.nroy.design.points(X = X3, Y = Y3, Y.target = Y.target, n.aug=n.aug,
+wave3 = add.nroy.design.points(X = X3, 
+                               Y = Y3,
+                               Y.target = Y.target,
+                               n.aug = 20000,
                                mins.aug = wave2$X.nroy.min,
                                maxes.aug = wave2$X.nroy.max,
                                thres = 3,
@@ -298,7 +300,7 @@ Y4 = run.model(X4)
 wave4 = add.nroy.design.points(X = X4, 
                                Y = Y4,
                                Y.target = Y.target,
-                               n.aug=n.aug,
+                               n.aug = 20000,
                                mins.aug = wave3$X.nroy.min,
                                maxes.aug = wave3$X.nroy.max,
                                thres = 3,
@@ -318,7 +320,7 @@ Y5 = run.model(X5)
 wave5 = add.nroy.design.points(X = X5,
                                Y = Y5,
                                Y.target = Y.target,
-                               n.aug=n.aug, 
+                               n.aug = 20000, 
                                mins.aug = wave4$X.nroy.min,
                                maxes.aug = wave4$X.nroy.max,
                                thres = 3,
@@ -336,7 +338,7 @@ Y6 = run.model(X6)
 wave6 = add.nroy.design.points(X = X6,
                                Y = Y6,
                                Y.target = Y.target, 
-                               n.aug=n.aug, 
+                               n.aug = 20000, 
                                mins.aug = wave5$X.nroy.min,
                                maxes.aug = wave5$X.nroy.max,
                                thres = 3,
@@ -360,6 +362,9 @@ cex = c(rep(1, nrow(all.nroy)-1), 2)
   
 pairs(all.nroy, xlim = c(0,1), ylim = c(0,1), col = cols, cex = cex)
 
+stop()
+
+
 # How large is the NROY space? 
 
 waves_list = list(wave1, wave2, wave3, wave4 ,wave5, wave6)
@@ -371,9 +376,111 @@ PrintNroyProp = function(obj){
 lapply(waves_list, FUN = PrintNroyProp)
 
 
+# Minimum Implausibility and Optical Depth plots.
+
+# Both plots rely on a grid for each x1 x2
+taat.design = function(X, n, means = NULL){
+  # Build a two at a time emulator design
+  # hold all of the other parameters at their mid values
+  
+  maxes <- apply(X, 2, max)
+  mins  <- apply(X, 2, min)
+  
+  if(is.null(means)) means <- apply(X, 2, mean)
+  
+  nip <- ncol(X) # number of input parameters
+  
+  col.ix <- combn(1:nip,2)
+  
+  em.vec <- seq(from = 0, to = 1, length.out = n)
+  
+  des.cols <- expand.grid(em.vec, em.vec)
+  
+  holder <- matrix(means, ncol = nip, nrow = nrow(des.cols), byrow = TRUE)
+  
+  out <- NULL
+  
+  for(i in 1:ncol(col.ix)){
+    
+    mat.part <- holder
+    
+    colu <- col.ix[,i]
+    
+    mat.part[, as.matrix(colu[1])] <- des.cols[,1]
+    mat.part[, as.matrix(colu[2])] <- des.cols[,2]
+    
+    out <- rbind(out, mat.part)
+    
+  }
+  
+  return(list(des = out, ix = col.ix))
+  
+}
 
 
+# Could use various strategies:
 
+# Smallest memory (but a large compute time) would be to 
+# 1) create a matrix which just has two columns using expand.grid
+# 2) swap those into a matrix with the right number of columns,
+# with other columns made up 
+# OR SIMPLER
+# Generate a TAAT matrix
+# repeat each row a number of times, and fill the relevant
+# columns with random numbers.
+
+TaatRandomDesign = function(X, n, reps, mins, maxes){
+  
+  # Generate a design that has two-at-a-time features,
+  # with (reps) random replications, and minima and
+  # maxima for each column decided by mins and maxes
+  
+  nip <- ncol(X) # number of input parameters
+  
+  col.ix <- combn(1:nip,2)
+  
+  out <- NULL
+  
+  for(i in 1:ncol(col.ix)){
+  
+    em.vec1 <- seq(from = mins[col.ix[1,i]], to = maxes[col.ix[1, i]], length.out = n)
+    em.vec2 <- seq(from = mins[col.ix[2,i]], to = maxes[col.ix[2, i]], length.out = n)
+    
+    # This bit generates the two "target" columns (the combinatoral bit)
+    des.cols <- as.matrix(expand.grid(em.vec1, em.vec2))
+    
+    # This repeats the rows of the combinatorial bit a number of times
+    des.cols.rep =  des.cols[rep(1:nrow(des.cols), each = reps), ]
+    
+    # for each row of the des.cols, generate a number of repetitions
+    
+    # Create a holder with random numbers for this section
+    # (should be the same nrows as des.cols.rep)
+    holder <- samp.unif(reps*(n^2), mins = mins, maxes = maxes)
+    
+    # place the des.cols.rep in the correct column
+    
+    #repholder = matrix(rep(holder,each=reps),nrow=reps)
+  
+    #holder <- matrix(means, ncol = nip, nrow = nrow(des.cols), byrow = TRUE)
+  
+
+    
+    mat.part <- holder
+    
+    colu <- col.ix[,i]
+    
+    mat.part[, as.matrix(colu[1])] <- des.cols.rep[,1]
+    mat.part[, as.matrix(colu[2])] <- des.cols.rep[,2]
+    
+    out <- rbind(out, mat.part)
+    
+  }
+  out
+  
+}
+  
+test = TaatRandomDesign(X, n = 3, reps = 3, mins = c(0,0,0,0), maxes = c(1,1,1,0.6))
 
 # from Andrianakis et al. (2015): 
 # Suppose that in wave we have a number of non-implausible points. 
