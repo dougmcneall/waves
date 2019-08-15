@@ -499,6 +499,7 @@ TaatRandomMulti = function(X, fits, n, reps, mins, maxes,
   impmat = matrix(NA, nrow = nrow(taat.random$des), ncol = length(fits))
   predmat.mean = matrix(NA, nrow = nrow(taat.random$des), ncol = length(fits))
   predmat.sd = matrix(NA, nrow = nrow(taat.random$des), ncol = length(fits))
+  minmat = matrix(NA, nrow = n*n * ncol(taat.random$ix), ncol = length(fits))
   
   for(i in 1:length(fits)){
     
@@ -514,16 +515,26 @@ TaatRandomMulti = function(X, fits, n, reps, mins, maxes,
     impmat[, i] = imp
     predmat.mean[, i] = pred$mean
     predmat.sd[, i] = pred$sd
+    
+    repmat = matrix(imp , nrow = reps) # each column contains the reps.
+    minvec = apply(repmat,2,min) # now this minvec has the same ordering as col.ix
+    minmat[, i] = minvec
+    
   }
   
-return(list(des = taat.random$des, ix =  taat.random$ix, 
-            impmat = impmat, predmat.mean = predmat.mean, predmat.sd = predmat.sd))
+  # Actually find the min too, and sample
+  
+  return(list(des = taat.random$des, ix =  taat.random$ix, 
+            impmat = impmat, predmat.mean = predmat.mean, predmat.sd = predmat.sd,
+            minmat = minmat,
+            n = n, reps = reps))
   
 }
 # Repeat over all the outputs
 
-test = TaatRandomMulti(X = X6, fits = wave6$fit.list,
-                       n = 21, reps = 20,
+test = TaatRandomMulti(X = X2, fits = wave2$fit.list,
+                       n = 21, 
+                       reps = 30,
                        mins = rep(0,4),
                        maxes = rep(1,4),
                        disc.list = disc.list,
@@ -531,23 +542,53 @@ test = TaatRandomMulti(X = X6, fits = wave6$fit.list,
                        Y.target = Y.target,
                        obs.sd.list = obs.sd.list)
 
-PlotMinImpTaat = function(des, imp, n, reps, cols){
+reset = function() {
+  par(mfrow=c(1, 1), oma=rep(0, 4), mar=rep(0, 4), new=TRUE)
+  plot(0:1, 0:1, type="n", xlab="", ylab="", axes=FALSE)
+}
+
+PlotMinImpTaat = function(taat, cols){
   
-  repmat = matrix(imp , nrow = reps) # each column contains the reps.
-  minvec = apply(repmat,2,min) # now this minvec has the same ordering as col.ix
+  # setup the layout matrix
+  b = matrix(0, ncol(taat$des) - 1, ncol(taat$des) - 1 )
+  b[lower.tri(b)| row(b)==col(b)] <- 1:ncol(taat$ix)
+  nf <- layout(b)
   
-  cplot(x = des[seq(from = 1, to = reps*n^2, by = reps), 1 ],
-        y = des[seq(from = 1, to = reps*n^2, by = reps), 2 ], z = minvec,
-        cols = cols, pch = 20, cex = 2)
+  npc <- taat$n*taat$n
+  
+  for(i in 1:ncol(taat$ix)){
+    
+    # indexes into the original design
+    i.ix <- ((i * npc) - (npc - 1)) : (i* npc)
+    
+    # this indexes into the repeated design
+    j.ix = (i.ix*taat$reps)-(taat$reps-1)
+    
+    x.ix <- taat$ix[1,i]
+    y.ix <- taat$ix[2,i]
+    
+    cplotShort(taat$des[j.ix, x.ix],
+               taat$des[j.ix, y.ix],
+               z =  taat$minmat[i.ix],
+               col = cols,
+               pch = 20,
+               cex = 2,
+               xlab = colnames(X)[x.ix],
+               ylab = colnames(X)[y.ix]
+               #axes = FALSE
+    )
+  #  points(X.target[x.ix], X.target[y.ix], col = 'black', bg = 'green', cex = 2, pch = 21)
+  }
   
 }
 
+PlotMinImpTaat(test, cols = blues)
 
-# generating the right indices:
+# Need to set maximum implausibility (or at least rescale all the plots in colour)
+# Need to add a colour bar.
 
-
-PlotMinImpTaat(des = test$des, imp = test$impmat[,3], n = 21, reps = 20, cols = blues)
-  
+reset()
+image.plot()
 
 # This is code from FAMOUS that produces 7x7 plots, but should be useful for
 # recycling
