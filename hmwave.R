@@ -447,7 +447,7 @@ TaatRandomDesign = function(X, n, reps, mins, maxes){
 }
   
 
-n = 15
+n = 21
 reps = 20
 taat.random = TaatRandomDesign(X6,
                                n = n, 
@@ -481,7 +481,160 @@ minvec = apply(repmat,2,min) # now this minvec has the same ordering as col.ix
 # The shortcut is just to sample every (reps), rather than outputting another matrix
 cplot(x = taat.random$des[seq(from = 1, to = reps*n^2, by = reps), 1 ],
       y = taat.random$des[seq(from = 1, to = reps*n^2, by = reps), 2 ], z = minvec,
-           cols = blues, pch = 20, cex = 3)
+           cols = blues, pch = 20, cex = 2)
+
+
+TaatRandomMulti = function(X, fits, n, reps, mins, maxes,
+                           disc.list, disc.sd.list, Y.target, obs.sd.list){
+  # Calculates the two-at-a-time implausibility, with other dimensions sampled
+  # randomly between mins and maxes
+  
+  taat.random = TaatRandomDesign(X,
+                                 n = n, 
+                                 reps = reps,
+                                 mins = mins,
+                                 maxes = maxes
+  )
+  
+  impmat = matrix(NA, nrow = nrow(taat.random$des), ncol = length(fits))
+  predmat.mean = matrix(NA, nrow = nrow(taat.random$des), ncol = length(fits))
+  predmat.sd = matrix(NA, nrow = nrow(taat.random$des), ncol = length(fits))
+  
+  for(i in 1:length(fits)){
+    
+      pred = predict(fits[[i]], newdata = taat.random$des, type = 'UK')
+      
+      imp = impl(em = pred$mean,
+               em.sd = pred$sd, 
+               disc = disc.list[[i]],
+               disc.sd = disc.sd.list[[i]],
+               obs = Y.target[i],
+               obs.sd = obs.sd.list[[i]]
+              )
+    impmat[, i] = imp
+    predmat.mean[, i] = pred$mean
+    predmat.sd[, i] = pred$sd
+  }
+  
+return(list(des = taat.random$des, ix =  taat.random$ix, 
+            impmat = impmat, predmat.mean = predmat.mean, predmat.sd = predmat.sd))
+  
+}
+# Repeat over all the outputs
+
+test = TaatRandomMulti(X = X6, fits = wave6$fit.list,
+                       n = 21, reps = 20,
+                       mins = rep(0,4),
+                       maxes = rep(1,4),
+                       disc.list = disc.list,
+                       disc.sd.list = disc.sd.list,
+                       Y.target = Y.target,
+                       obs.sd.list = obs.sd.list)
+
+PlotMinImpTaat = function(des, imp, n, reps, cols){
+  
+  repmat = matrix(imp , nrow = reps) # each column contains the reps.
+  minvec = apply(repmat,2,min) # now this minvec has the same ordering as col.ix
+  
+  cplot(x = des[seq(from = 1, to = reps*n^2, by = reps), 1 ],
+        y = des[seq(from = 1, to = reps*n^2, by = reps), 2 ], z = minvec,
+        cols = cols, pch = 20, cex = 2)
+  
+}
+
+
+# generating the right indices:
+
+
+PlotMinImpTaat(des = test$des, imp = test$impmat[,3], n = 21, reps = 20, cols = blues)
+  
+
+# This is code from FAMOUS that produces 7x7 plots, but should be useful for
+# recycling
+pairs.taat.imp <- function(X, y, X.target, obs, obs.sd = 0, disc = 0, disc.sd = 0, n = 21, title.text = '',
+                           pdf.out = FALSE, filename){
+  
+  taat <- taat.design(X, n = n, means = X.target)
+  colnames(taat$des) <- colnames(X)
+  des <- data.frame(taat$des)
+  
+  fit <- km(~., design = X, response = y)
+  
+  taat.pred.stan <- predict(fit, newdata = X.target, type = 'UK')
+  taat.pred <- predict(fit, newdata = des, type = 'UK')
+  
+  taat.impl <- impl(em = taat.pred$mean, em.sd = taat.pred$sd,
+                    disc = disc, obs = obs, disc.sd = disc.sd, obs.sd = obs.sd)
+  
+  if(pdf.out == TRUE){
+    pdf(width = 7, height = 7, file = filename)
+  }
+  
+  else{
+    dev.new(width = 7, height = 7)
+  }
+  
+  par(mar = c(0.5,0.5,0.5,0.5), oma = c(2,2,5,0.1), mgp = c(2,1,0), font.lab = 2, cex.lab = 1.5)
+  nf <- layout(matrix(c(1,22,0,0,0,0,
+                        2,7,0,0,0,0,
+                        3,8,12,0,0,0,
+                        4,9,13,16,0,0,
+                        5,10,14,17,19,0,
+                        6,11,15,18,20,21
+  ), 6,6, byrow = TRUE))
+  
+  npc <- n*n
+  
+  for(i in 1:21){
+    
+    i.ix <- ((i * npc) - (npc - 1)) : (i* npc)
+    x.ix <- taat$ix[1,i]
+    y.ix <- taat$ix[2,i]
+    
+    cplotShort(taat$des[i.ix, x.ix],
+               taat$des[i.ix, y.ix],
+               z =  taat.impl[i.ix],
+               col = byr,
+               pch = 20,
+               xlab = colnames(X)[x.ix],
+               ylab = colnames(X)[y.ix],
+               axes = FALSE
+    )
+    points(X.target[x.ix], X.target[y.ix], col = 'black', bg = 'green', cex = 2, pch = 21)
+    
+    if(i %in% c(1,2,3,4,5,6)) mtext(colnames(X)[y.ix], side = 2, line = 0.5, cex = 1)
+    if(i %in% c(6,11,15,18,20,21)) mtext(colnames(X)[x.ix], side = 1, line = 1, cex = 1)
+    if(i == 1) mtext(title.text, side = 3, line = 1, cex = 1.2)
+    
+  }
+  #zr <- range(taat.impl)
+  zr <- c(0,3)
+  par(mar = c(1,1,1,6))
+  plot(1:10, type = 'n', axes = FALSE, xlab = '', ylab = '')
+  
+  
+  
+  image.plot(legend.only = TRUE,
+             zlim = zr,
+             col = byr,
+             legend.args = list(text = 'Implausibility', side = 3, line = 1),
+             legend.width = 2,
+             #legend.shrink = 1.5,
+             horizontal = FALSE
+  )
+  par(mar = c(0,0,0,0))
+  plot(1:10, type = 'n', axes = FALSE, xlab = '', ylab = '')
+  legend('topleft',legend = 'Default\nParameter', pch = 21, pt.bg = 'green',cex = 1.3, pt.cex = 1.5,
+         bty = 'n')
+  
+  if(pdf.out == TRUE){
+    dev.off()
+  }
+  
+}
+
+
+
 
 
 
