@@ -18,6 +18,8 @@
 # Could generate a number of waves and then see how the fit
 # statistics change
 
+# testing Vesrion control 
+
 library(lhs)
 library(DiceKriging)
 source('https://raw.githubusercontent.com/dougmcneall/packages-git/5f79ffe749f25c6fc39f4f7925e1538d36b7caf1/emtools.R')
