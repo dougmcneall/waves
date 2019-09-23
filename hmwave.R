@@ -1,4 +1,4 @@
-# hmwave.R
+ls # hmwave.R
 # Functions for producing history matching waves
 # History matching process (for each separate output)
 
@@ -592,93 +592,6 @@ PlotMinImpTaat(test, cols = blues)
 reset()
 image.plot()
 
-# This is code from FAMOUS that produces 7x7 plots, but should be useful for
-# recycling
-pairs.taat.imp <- function(X, y, X.target, obs, obs.sd = 0, disc = 0, disc.sd = 0, n = 21, title.text = '',
-                           pdf.out = FALSE, filename){
-  
-  taat <- taat.design(X, n = n, means = X.target)
-  colnames(taat$des) <- colnames(X)
-  des <- data.frame(taat$des)
-  
-  fit <- km(~., design = X, response = y)
-  
-  taat.pred.stan <- predict(fit, newdata = X.target, type = 'UK')
-  taat.pred <- predict(fit, newdata = des, type = 'UK')
-  
-  taat.impl <- impl(em = taat.pred$mean, em.sd = taat.pred$sd,
-                    disc = disc, obs = obs, disc.sd = disc.sd, obs.sd = obs.sd)
-  
-  if(pdf.out == TRUE){
-    pdf(width = 7, height = 7, file = filename)
-  }
-  
-  else{
-    dev.new(width = 7, height = 7)
-  }
-  
-  par(mar = c(0.5,0.5,0.5,0.5), oma = c(2,2,5,0.1), mgp = c(2,1,0), font.lab = 2, cex.lab = 1.5)
-  nf <- layout(matrix(c(1,22,0,0,0,0,
-                        2,7,0,0,0,0,
-                        3,8,12,0,0,0,
-                        4,9,13,16,0,0,
-                        5,10,14,17,19,0,
-                        6,11,15,18,20,21
-  ), 6,6, byrow = TRUE))
-  
-  npc <- n*n
-  
-  for(i in 1:21){
-    
-    i.ix <- ((i * npc) - (npc - 1)) : (i* npc)
-    x.ix <- taat$ix[1,i]
-    y.ix <- taat$ix[2,i]
-    
-    cplotShort(taat$des[i.ix, x.ix],
-               taat$des[i.ix, y.ix],
-               z =  taat.impl[i.ix],
-               col = byr,
-               pch = 20,
-               xlab = colnames(X)[x.ix],
-               ylab = colnames(X)[y.ix],
-               axes = FALSE
-    )
-    points(X.target[x.ix], X.target[y.ix], col = 'black', bg = 'green', cex = 2, pch = 21)
-    
-    if(i %in% c(1,2,3,4,5,6)) mtext(colnames(X)[y.ix], side = 2, line = 0.5, cex = 1)
-    if(i %in% c(6,11,15,18,20,21)) mtext(colnames(X)[x.ix], side = 1, line = 1, cex = 1)
-    if(i == 1) mtext(title.text, side = 3, line = 1, cex = 1.2)
-    
-  }
-  #zr <- range(taat.impl)
-  zr <- c(0,3)
-  par(mar = c(1,1,1,6))
-  plot(1:10, type = 'n', axes = FALSE, xlab = '', ylab = '')
-  
-  
-  
-  image.plot(legend.only = TRUE,
-             zlim = zr,
-             col = byr,
-             legend.args = list(text = 'Implausibility', side = 3, line = 1),
-             legend.width = 2,
-             #legend.shrink = 1.5,
-             horizontal = FALSE
-  )
-  par(mar = c(0,0,0,0))
-  plot(1:10, type = 'n', axes = FALSE, xlab = '', ylab = '')
-  legend('topleft',legend = 'Default\nParameter', pch = 21, pt.bg = 'green',cex = 1.3, pt.cex = 1.5,
-         bty = 'n')
-  
-  if(pdf.out == TRUE){
-    dev.off()
-  }
-  
-}
-
-
-
-
 
 
 ExtractMinImp = function(taat, n, reps){
@@ -920,6 +833,104 @@ AddDesignPoints = function(X, Y, Y.target, n.aug, thres = 3,
 
 
 
+
+
+
+# tests in sensitivity analysis
+
+
+MeanEffectDesign = function(design, n, reps, un = FALSE, ...){
+
+# Design to calculate the mean effect of a parameter, while all other
+# parameters are varied across their ranges.
+
+# INPUTS:
+# design .... original design (e.g. a latin hypercube or output from expand.grid)
+# n ......... number of design points in each dimension
+# reps ...... number of times to repeat each observation
+# un ........ Should we normalise the matrix to un.mins and un.maxes?
+# un.mins, un.maxes  ... min and max scaling of the final design
+
+# OUTPUTS:
+# ........... (n x nd) rows, nd columns design matrix, sweeping through parameter space
+  
+oamat <- NULL
+
+nd <- ncol(design)
+
+mindes <- rep(0, nd)
+maxdes <- rep(1, nd)
+
+for (j in 1:nd){
+  # base matrix of 'best' values to put the sweep values into
+  #basemat <- matrix(meandes, nrow = n, ncol = nd , byrow = TRUE)
+# need to find some way of applying the mins and maxes
+  basemat <- matrix(runif(n*nd*reps), nrow = n*reps, ncol = nd)
+  # use seq and length.out
+  vec <- seq(from = mindes[j], to = maxdes[j], length.out = n)
+  repvec <- rep(vec, each = reps)
+  basemat[ ,j] <- repvec
+  oamat <- rbind(oamat,basemat)
+  
+  }
+
+
+# Apply normalisation to the matrix AFTER it's generated on the unit cube.
+if(un==TRUE){out <- unnormalize(oamat, un.mins = un.mins, un.maxes = un.maxes)}
+
+else {out <- oamat}
+
+out
+}
+
+# Is there a difference in sensitivity between wave 1 and wave 6?
+
+wave1.maxes = apply(X, 1, max)
+wave1.mins = apply(X, 2, min)
+
+# Create the design that will calculate the mean effect
+X.me.wave1 = MeanEffectDesign(X, n = 4, reps = 3, un.mins = wave1.mins, un.maxes = wave1.maxes)
+
+# Predictions list for the mean effect
+pred.me.wave1  = lapply(wave1$fit.list, FUN = 'predict', newdata = X.me.wave1, type = 'UK')
+
+
+plot(X.me.wave1[,1], pred.me.wave1[[1]]$mean)
+
+reps = 30
+nd = 4
+n = 10
+
+
+MeanEffectCalc = function(X.me,y.me, reps, n){
+  # Calculate the Mean effects, using output from MeanEffectsDesign
+  # And the emulator-predicted output
+
+  reps.mat = matrix(y.me, ncol = reps, byrow = TRUE)
+  
+  reps.mean = apply(reps.mat,1, mean)
+
+  mean.effect.mat = matrix(reps.mean, nrow = n, byrow = FALSE)
+
+  mean.effect = apply(mean.effects.mat, 2, var)
+
+  return(list(mean.effect = mean.effect,
+              mean.effect.mat = mean.effect.mat)
+         )
+}
+
+
+  
+stop()
+
+
+
+
+
+
+               
+
+  
 
 
 
