@@ -835,11 +835,12 @@ AddDesignPoints = function(X, Y, Y.target, n.aug, thres = 3,
 
 
 
+# --------------------------------------------------------------
+# Mean effect for sensitivity analysis
+# --------------------------------------------------------------
 
-# tests in sensitivity analysis
 
-
-MeanEffectDesign = function(design, n, reps, un = FALSE, ...){
+MeanEffectDesign = function(design, n, reps, mins, maxes){
 
 # Design to calculate the mean effect of a parameter, while all other
 # parameters are varied across their ranges.
@@ -858,53 +859,67 @@ oamat <- NULL
 
 nd <- ncol(design)
 
-mindes <- rep(0, nd)
-maxdes <- rep(1, nd)
+# mindes <- rep(0, nd)
+# maxdes <- rep(1, nd)
 
 for (j in 1:nd){
   # base matrix of 'best' values to put the sweep values into
   #basemat <- matrix(meandes, nrow = n, ncol = nd , byrow = TRUE)
 # need to find some way of applying the mins and maxes
-  basemat <- matrix(runif(n*nd*reps), nrow = n*reps, ncol = nd)
+  # basemat <- matrix(runif(n*nd*reps), nrow = n*reps, ncol = nd)
+  basemat <- samp.unif(n = n*reps, mins = mins, maxes = maxes)
+  
   # use seq and length.out
-  vec <- seq(from = mindes[j], to = maxdes[j], length.out = n)
+  vec <- seq(from = mins[j], to = maxes[j], length.out = n)
   repvec <- rep(vec, each = reps)
   basemat[ ,j] <- repvec
-  oamat <- rbind(oamat,basemat)
-  
+  oamat <- rbind(oamat,basemat)  
   }
 
-
 # Apply normalisation to the matrix AFTER it's generated on the unit cube.
-if(un==TRUE){out <- unnormalize(oamat, un.mins = un.mins, un.maxes = un.maxes)}
+#if(un==TRUE){out <- unnormalize(oamat, un.mins = un.mins, un.maxes = un.maxes)}
 
-else {out <- oamat}
+#else {out <- oamat}
 
+out <- oamat
 out
+
 }
 
 # Is there a difference in sensitivity between wave 1 and wave 6?
 
-wave1.maxes = apply(X, 1, max)
+wave1.maxes = apply(X, 2, max)
 wave1.mins = apply(X, 2, min)
 
+reps = 300
+nd = 4
+n = 50
+
 # Create the design that will calculate the mean effect
-X.me.wave1 = MeanEffectDesign(X, n = 4, reps = 3, un.mins = wave1.mins, un.maxes = wave1.maxes)
+X.me.wave1 = MeanEffectDesign(X, n = n, reps = reps, mins = wave1.mins, maxes = wave1.maxes)
 
 # Predictions list for the mean effect
 pred.me.wave1  = lapply(wave1$fit.list, FUN = 'predict', newdata = X.me.wave1, type = 'UK')
 
 
-plot(X.me.wave1[,1], pred.me.wave1[[1]]$mean)
-
-reps = 30
-nd = 4
-n = 10
-
-
 MeanEffectCalc = function(X.me,y.me, reps, n){
   # Calculate the Mean effects, using output from MeanEffectsDesign
   # And the emulator-predicted output
+
+  # Inputs
+  # X.me ...... design output from MeanEffectDesign()
+  # y.me ...... emulated mean output at points in X.me
+  # reps ...... Number of repeated points at each subdivision
+  #             of the parameters
+  # n ......... Number of subdivisions of each parameter
+
+  # Output
+  # mean.effect.var is the variance of the mean effect, a
+  # summary of the mean impact of input [i] on the output
+  # taken across other parameter perturbations
+  # mean.effect.mat is a matrix with the mean effect of parameter [i]
+  # in each column [i]
+
 
   reps.mat = matrix(y.me, ncol = reps, byrow = TRUE)
   
@@ -912,13 +927,166 @@ MeanEffectCalc = function(X.me,y.me, reps, n){
 
   mean.effect.mat = matrix(reps.mean, nrow = n, byrow = FALSE)
 
-  mean.effect = apply(mean.effects.mat, 2, var)
+  mean.effect.var = apply(mean.effect.mat, 2, var)
 
-  return(list(mean.effect = mean.effect,
+  
+  return(list(mean.effect.var = mean.effect.var,
               mean.effect.mat = mean.effect.mat)
          )
 }
 
+
+# Repeat for each of the outputs
+me.wave1.y1 = MeanEffectCalc(X.me = X.me.wave1,
+  y.me = pred.me.wave1[[1]]$mean,
+  reps = reps,
+  n = n
+  )
+
+me.wave1.y2 = MeanEffectCalc(X.me = X.me.wave1,
+  y.me = pred.me.wave1[[2]]$mean,
+  reps = reps,
+  n = n
+  )
+
+me.wave1.y3 = MeanEffectCalc(X.me = X.me.wave1,
+  y.me = pred.me.wave1[[3]]$mean,
+  reps = reps,
+  n = n
+  )
+
+ 
+
+
+dev.new(width = 15, height = 5)
+par(mfrow = c(1,3))
+
+ylim = range(me.wave1.y1$mean.effect.mat)
+
+plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
+
+for(i in 1:nd){
+
+  inseq = seq(from = wave1.mins[i], wave1.maxes[i], length.out = n)
+  
+  points(inseq, me.wave1.y1$mean.effect.mat[,i], ylim = ylim,
+         type = 'o', col = i)
+
+}
+
+
+ylim = range(me.wave1.y2$mean.effect.mat)
+plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
+
+for(i in 1:nd){
+
+  inseq = seq(from = wave1.mins[i], wave1.maxes[i], length.out = n)
+  
+  points(inseq, me.wave1.y2$mean.effect.mat[,i], ylim = ylim,
+         type = 'o', col = i)
+
+}
+
+
+ylim = range(me.wave1.y3$mean.effect.mat)
+plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
+
+for(i in 1:nd){
+
+  inseq = seq(from = wave1.mins[i], wave1.maxes[i], length.out = n)
+  
+  points(inseq, me.wave1.y3$mean.effect.mat[,i], ylim = ylim,
+         type = 'o', col = i)
+
+}
+
+# Place all of the "variance of mean effects" together to make a matrix
+
+test = rbind(me.wave1.y1$mean.effect.var,
+  me.wave1.y2$mean.effect.var,
+  me.wave1.y3$mean.effect.var
+  )
+
+# Next do the thing for wave 6, and then get rid of the bits that
+# are ruled out.
+
+
+
+wave6.maxes = apply(X6, 2, max)
+wave6.mins = apply(X6, 2, min)
+
+
+# Create the design that will calculate the mean effect
+X.me.wave6 = MeanEffectDesign(X, n = n, reps = reps, mins = wave6.mins, maxes = wave6.maxes)
+
+# Predictions list for the mean effect
+pred.me.wave6  = lapply(wave6$fit.list, FUN = 'predict', newdata = X.me.wave6, type = 'UK')
+
+
+
+# Repeat for each of the outputs
+me.wave6.y1 = MeanEffectCalc(X.me = X.me.wave6,
+  y.me = pred.me.wave6[[1]]$mean,
+  reps = reps,
+  n = n
+  )
+
+me.wave6.y2 = MeanEffectCalc(X.me = X.me.wave6,
+  y.me = pred.me.wave6[[2]]$mean,
+  reps = reps,
+  n = n
+  )
+
+me.wave6.y3 = MeanEffectCalc(X.me = X.me.wave6,
+  y.me = pred.me.wave6[[3]]$mean,
+  reps = reps,
+  n = n
+  )
+
+
+dev.new(width = 15, height = 5)
+par(mfrow = c(1,3))
+
+ylim = range(me.wave6.y1$mean.effect.mat)
+
+plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
+
+for(i in 1:nd){
+
+  inseq = seq(from = wave6.mins[i], wave6.maxes[i], length.out = n)
+  
+  points(inseq, me.wave6.y1$mean.effect.mat[,i], ylim = ylim,
+         type = 'o', col = i)
+
+}
+
+
+ylim = range(me.wave6.y2$mean.effect.mat)
+plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
+
+for(i in 1:nd){
+
+  inseq = seq(from = wave6.mins[i], wave6.maxes[i], length.out = n)
+  
+  points(inseq, me.wave6.y2$mean.effect.mat[,i], ylim = ylim,
+         type = 'o', col = i)
+
+}
+
+
+ylim = range(me.wave6.y3$mean.effect.mat)
+plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
+
+for(i in 1:nd){
+
+  inseq = seq(from = wave6.mins[i], wave6.maxes[i], length.out = n)
+  
+  points(inseq, me.wave6.y3$mean.effect.mat[,i], ylim = ylim,
+         type = 'o', col = i)
+
+}
+
+# Next: know out anything which is ruled out.
 
   
 stop()
