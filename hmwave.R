@@ -1,4 +1,4 @@
-ls # hmwave.R
+# hmwave.R
 # Functions for producing history matching waves
 # History matching process (for each separate output)
 
@@ -17,8 +17,6 @@ ls # hmwave.R
 
 # Could generate a number of waves and then see how the fit
 # statistics change
-
-# testing Vesrion control 
 
 library(lhs)
 library(DiceKriging)
@@ -138,15 +136,21 @@ colnames(X) <- c('x1', 'x2', 'x3', 'x4')
 X.target = matrix(runif(4), nrow = 1)
 
 # run the model outside of the function
-Y = matrix(NA, nrow = n, ncol = d)
-colnames(Y) <- c('y1', 'y2', 'y3')
-Y = run.model(X)
-Y.target = run.model(X.target)
+#Y = run.model(X)
+#Y.target = run.model(X.target)
 
+Y.raw = run.model(X)
+Y.target.raw = run.model(X.target)
+
+Y.all.norm = normalize(rbind(Y.raw, Y.target.raw))
+Y = Y.all.norm[1:n, ]
+Y.target = matrix(Y.all.norm[n+1, ], nrow = 1)
+
+# Will need to redo the uncertainty measures for the normalised output
 # The standard deviation of the model output is approximately [5,5,1] and the
 # mean is around [12,8,2]
 
-obs.sd.list = list(0.2,0.2,0.1)
+obs.sd.list = list(0.013,0.013,0.05)
 disc.list = list(0,0,0)
 disc.sd.list = list(0, 0, 0) 
 thres = 3
@@ -259,7 +263,8 @@ keep1.ix = which(apply(X, FUN = WithinRange,1,
                       mins = wave1$X.nroy.min))
 
 X2 = rbind(X[keep1.ix, ] , ChooseMaximinNroy(n.app = n.app, waveobj=wave1, nreps = 10000))
-Y2 = run.model(X2)
+Y2.raw = run.model(X2)
+Y2 = normalize(Y2.raw, wrt = Y.raw)
 
 wave2 = add.nroy.design.points(X = X2,
                                Y = Y2, 
@@ -277,7 +282,9 @@ keep2.ix = which(apply(X2, FUN = WithinRange,1,
                        mins = wave2$X.nroy.min))
 
 X3 = rbind(X2[keep2.ix, ], ChooseMaximinNroy(n.app = n.app, waveobj=wave2, nreps = 10000))
-Y3 = run.model(X3)
+
+Y3.raw = run.model(X3)
+Y3 = normalize(Y3.raw, wrt = Y.raw)
 
 wave3 = add.nroy.design.points(X = X3, 
                                Y = Y3,
@@ -297,7 +304,8 @@ keep3.ix = which(apply(X3, FUN = WithinRange,1,
 X4 = rbind(X3[keep3.ix, ],
            ChooseMaximinNroy(n.app = n.app, waveobj=wave3, nreps = 10000))
 
-Y4 = run.model(X4)
+Y4.raw = run.model(X4)
+Y4 = normalize(Y4.raw, wrt = Y.raw)
 
 wave4 = add.nroy.design.points(X = X4, 
                                Y = Y4,
@@ -317,7 +325,9 @@ keep4.ix = which(apply(X4, FUN = WithinRange,1,
 X5 = rbind(X4[keep4.ix, ],
            ChooseMaximinNroy(n.app = n.app, waveobj=wave4, nreps = 10000))
 
-Y5 = run.model(X5)
+Y5.raw = run.model(X5)
+Y5 = normalize(Y5.raw, wrt = Y.raw)
+
 
 wave5 = add.nroy.design.points(X = X5,
                                Y = Y5,
@@ -335,7 +345,10 @@ keep5.ix = which(apply(X5, FUN = WithinRange,1,
                        mins = wave5$X.nroy.min))
 
 X6 = rbind(X5[keep5.ix, ], ChooseMaximinNroy(n.app = n.app, waveobj=wave5, nreps = 10000))
-Y6 = run.model(X6)
+
+Y6.raw = run.model(X6)
+Y6 = normalize(Y6.raw, wrt = Y.raw)
+
 
 wave6 = add.nroy.design.points(X = X6,
                                Y = Y6,
@@ -840,14 +853,14 @@ AddDesignPoints = function(X, Y, Y.target, n.aug, thres = 3,
 # --------------------------------------------------------------
 
 
-MeanEffectDesign = function(design, n, reps, mins, maxes){
+MeanEffectDesign = function(design, ndp, reps, mins, maxes){
 
 # Design to calculate the mean effect of a parameter, while all other
 # parameters are varied across their ranges.
 
 # INPUTS:
 # design .... original design (e.g. a latin hypercube or output from expand.grid)
-# n ......... number of design points in each dimension
+# ndp ......... number of design points in each dimension
 # reps ...... number of times to repeat each observation
 # un ........ Should we normalise the matrix to un.mins and un.maxes?
 # un.mins, un.maxes  ... min and max scaling of the final design
@@ -867,10 +880,10 @@ for (j in 1:nd){
   #basemat <- matrix(meandes, nrow = n, ncol = nd , byrow = TRUE)
 # need to find some way of applying the mins and maxes
   # basemat <- matrix(runif(n*nd*reps), nrow = n*reps, ncol = nd)
-  basemat <- samp.unif(n = n*reps, mins = mins, maxes = maxes)
+  basemat <- samp.unif(n = ndp*reps, mins = mins, maxes = maxes)
   
   # use seq and length.out
-  vec <- seq(from = mins[j], to = maxes[j], length.out = n)
+  vec <- seq(from = mins[j], to = maxes[j], length.out = ndp)
   repvec <- rep(vec, each = reps)
   basemat[ ,j] <- repvec
   oamat <- rbind(oamat,basemat)  
@@ -893,16 +906,16 @@ wave1.mins = apply(X, 2, min)
 
 reps = 300
 nd = 4
-n = 50
+ndp = 50
 
 # Create the design that will calculate the mean effect
-X.me.wave1 = MeanEffectDesign(X, n = n, reps = reps, mins = wave1.mins, maxes = wave1.maxes)
+X.me.wave1 = MeanEffectDesign(X, ndp = ndp, reps = reps, mins = wave1.mins, maxes = wave1.maxes)
 
 # Predictions list for the mean effect
 pred.me.wave1  = lapply(wave1$fit.list, FUN = 'predict', newdata = X.me.wave1, type = 'UK')
 
 
-MeanEffectCalc = function(X.me,y.me, reps, n){
+MeanEffectCalc = function(X.me,y.me, reps, ndp){
   # Calculate the Mean effects, using output from MeanEffectsDesign
   # And the emulator-predicted output
 
@@ -911,7 +924,7 @@ MeanEffectCalc = function(X.me,y.me, reps, n){
   # y.me ...... emulated mean output at points in X.me
   # reps ...... Number of repeated points at each subdivision
   #             of the parameters
-  # n ......... Number of subdivisions of each parameter
+  # ndp ......... Number of subdivisions of each parameter
 
   # Output
   # mean.effect.var is the variance of the mean effect, a
@@ -925,7 +938,7 @@ MeanEffectCalc = function(X.me,y.me, reps, n){
   
   reps.mean = apply(reps.mat,1, mean)
 
-  mean.effect.mat = matrix(reps.mean, nrow = n, byrow = FALSE)
+  mean.effect.mat = matrix(reps.mean, nrow = ndp, byrow = FALSE)
 
   mean.effect.var = apply(mean.effect.mat, 2, var)
 
@@ -940,84 +953,84 @@ MeanEffectCalc = function(X.me,y.me, reps, n){
 me.wave1.y1 = MeanEffectCalc(X.me = X.me.wave1,
   y.me = pred.me.wave1[[1]]$mean,
   reps = reps,
-  n = n
+  ndp = ndp
   )
 
 me.wave1.y2 = MeanEffectCalc(X.me = X.me.wave1,
   y.me = pred.me.wave1[[2]]$mean,
   reps = reps,
-  n = n
+  ndp = ndp
   )
 
 me.wave1.y3 = MeanEffectCalc(X.me = X.me.wave1,
   y.me = pred.me.wave1[[3]]$mean,
   reps = reps,
-  n = n
+  ndp = ndp
   )
 
- 
 
+# Plot the (normalised) mean effects for each output 
+dev.new(width = 20, height = 5)
+par(mfrow = c(1,5), oma = c(0,0,3,0)) # Plot per parameter, not output
 
-dev.new(width = 15, height = 5)
-par(mfrow = c(1,3))
-
-ylim = range(me.wave1.y1$mean.effect.mat)
-
-plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
-
+xlim = c(0,1)
+ylim = c(0,1)
 for(i in 1:nd){
 
-  inseq = seq(from = wave1.mins[i], wave1.maxes[i], length.out = n)
+  inseq = seq(from = wave1.mins[i], wave1.maxes[i], length.out = ndp)
   
-  points(inseq, me.wave1.y1$mean.effect.mat[,i], ylim = ylim,
-         type = 'o', col = i)
-
-}
-
-
-ylim = range(me.wave1.y2$mean.effect.mat)
-plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
-
-for(i in 1:nd){
-
-  inseq = seq(from = wave1.mins[i], wave1.maxes[i], length.out = n)
+  plot(inseq, me.wave1.y1$mean.effect.mat[,i], ylim = ylim,
+         type = 'o', col = 'black', xlab = paste0('X',i),
+       ylab = 'Y (Normalised)')
+ 
   
   points(inseq, me.wave1.y2$mean.effect.mat[,i], ylim = ylim,
-         type = 'o', col = i)
-
-}
-
-
-ylim = range(me.wave1.y3$mean.effect.mat)
-plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
-
-for(i in 1:nd){
-
-  inseq = seq(from = wave1.mins[i], wave1.maxes[i], length.out = n)
+         type = 'o', col = 'red')
   
   points(inseq, me.wave1.y3$mean.effect.mat[,i], ylim = ylim,
-         type = 'o', col = i)
-
+         type = 'o', col = 'blue')
+  
+  legend('topleft', legend = c('Y1', 'Y2', 'Y3'), lwd = c(1,1,1), col = c('black', 'red', 'blue'))
+  
+  
 }
+mtext( text = 'Wave1', outer = TRUE, side = 3, line = 0.1, cex=2)
+
 
 # Place all of the "variance of mean effects" together to make a matrix
 
-test = rbind(me.wave1.y1$mean.effect.var,
+me.var.wave1 = rbind(me.wave1.y1$mean.effect.var,
   me.wave1.y2$mean.effect.var,
   me.wave1.y3$mean.effect.var
   )
 
-# Next do the thing for wave 6, and then get rid of the bits that
-# are ruled out.
+# Normalise by the overall variance
+var.wave1 = c(var(pred.me.wave1[[1]]$mean),
+  var(pred.me.wave1[[2]]$mean),
+  var(pred.me.wave1[[3]]$mean))
+
+main.effect.wave1 = sweep(me.var.wave1, MARGIN = 1, STATS = var.wave1, FUN = '/') 
 
 
+ys = c('y1', 'y2', 'y3')
+xs = c('x1', 'x2', 'x3', 'x4')
 
+rownames(main.effect.wave1) = ys
+colnames(main.effect.wave1) = xs
+
+blues = brewer.pal(9, 'Blues')
+main.effect.wave1.r = apply(main.effect.wave1, 2, rev)
+
+image(t(main.effect.wave1.r), col = blues, axes = FALSE )
+axis(2, at = seq(from=0, to=1, length.out=3), labels = rev(ys), las = 1)
+axis(1, at = seq(from=0, to=1, length.out=4), labels = xs, las = 1)
+
+# Next do the thing for wave 6
 wave6.maxes = apply(X6, 2, max)
 wave6.mins = apply(X6, 2, min)
 
-
 # Create the design that will calculate the mean effect
-X.me.wave6 = MeanEffectDesign(X, n = n, reps = reps, mins = wave6.mins, maxes = wave6.maxes)
+X.me.wave6 = MeanEffectDesign(X, ndp = ndp, reps = reps, mins = wave6.mins, maxes = wave6.maxes)
 
 # Predictions list for the mean effect
 pred.me.wave6  = lapply(wave6$fit.list, FUN = 'predict', newdata = X.me.wave6, type = 'UK')
@@ -1028,65 +1041,112 @@ pred.me.wave6  = lapply(wave6$fit.list, FUN = 'predict', newdata = X.me.wave6, t
 me.wave6.y1 = MeanEffectCalc(X.me = X.me.wave6,
   y.me = pred.me.wave6[[1]]$mean,
   reps = reps,
-  n = n
+  ndp = ndp
   )
 
 me.wave6.y2 = MeanEffectCalc(X.me = X.me.wave6,
   y.me = pred.me.wave6[[2]]$mean,
   reps = reps,
-  n = n
+  ndp = ndp
   )
 
 me.wave6.y3 = MeanEffectCalc(X.me = X.me.wave6,
   y.me = pred.me.wave6[[3]]$mean,
   reps = reps,
-  n = n
+  n = ndp
   )
 
 
-dev.new(width = 15, height = 5)
-par(mfrow = c(1,3))
 
-ylim = range(me.wave6.y1$mean.effect.mat)
+dev.new(width = 20, height = 5)
+par(mfrow = c(1,5), oma = c(0,0,3,0)) # Plot per parameter, not output
 
-plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
-
+xlim = c(0,1)
+ylim = c(0,1)
 for(i in 1:nd){
 
-  inseq = seq(from = wave6.mins[i], wave6.maxes[i], length.out = n)
+  inseq = seq(from = wave6.mins[i], wave6.maxes[i], length.out = ndp)
   
-  points(inseq, me.wave6.y1$mean.effect.mat[,i], ylim = ylim,
-         type = 'o', col = i)
-
-}
-
-
-ylim = range(me.wave6.y2$mean.effect.mat)
-plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
-
-for(i in 1:nd){
-
-  inseq = seq(from = wave6.mins[i], wave6.maxes[i], length.out = n)
+  plot(inseq, me.wave6.y1$mean.effect.mat[,i],
+       xlim = xlim, ylim = ylim,
+         type = 'o', col = 'black', xlab = paste0('X',i),
+       ylab = 'Y (Normalised)')
+ 
   
   points(inseq, me.wave6.y2$mean.effect.mat[,i], ylim = ylim,
-         type = 'o', col = i)
-
-}
-
-
-ylim = range(me.wave6.y3$mean.effect.mat)
-plot(1:10, xlim = c(0,1), ylim = ylim, type = 'n')
-
-for(i in 1:nd){
-
-  inseq = seq(from = wave6.mins[i], wave6.maxes[i], length.out = n)
+         type = 'o', col = 'red')
   
   points(inseq, me.wave6.y3$mean.effect.mat[,i], ylim = ylim,
-         type = 'o', col = i)
-
+         type = 'o', col = 'blue')
+  
+  legend('topleft', legend = c('Y1', 'Y2', 'Y3'), lwd = c(1,1,1), col = c('black', 'red', 'blue'))
+  
+  
 }
+mtext( text = 'Wave 6', outer = TRUE, side = 3, line = 0.1, cex=2)
+
+
+# The matrix of mean effects has changed by wave 6 as well
+me.var.wave6 = rbind(me.wave6.y1$mean.effect.var,
+  me.wave6.y2$mean.effect.var,
+  me.wave6.y3$mean.effect.var
+  )
+
+# I think this is wrong - the variance should be for all
+# model output
+# Normalise by the overall variance
+var.wave6 = c(var(pred.me.wave6[[1]]$mean),
+  var(pred.me.wave6[[2]]$mean),
+  var(pred.me.wave6[[3]]$mean))
+
+main.effect.wave6 = sweep(me.var.wave6, MARGIN = 1, STATS = var.wave6, FUN = '/') 
+
+rownames(main.effect.wave6) = ys
+colnames(main.effect.wave6) = xs
+
+# Reverse and transpose for plotting correctly
+main.effect.wave6.r = apply(main.effect.wave6, 2, rev)
+
+image(t(main.effect.wave6.r), col = blues, axes = FALSE )
+axis(2, at = seq(from=0, to=1, length.out=3), labels = rev(ys), las = 1)
+axis(1, at = seq(from=0, to=1, length.out=4), labels = xs, las = 1)
+
 
 # Next: know out anything which is ruled out.
+
+MainEffectCalc = function(X.me,y.me, reps, ndp){
+  # Calculate the Mean effects, using output from MeanEffectsDesign
+  # And the emulator-predicted output
+
+  # Inputs
+  # X.me ...... design output from MeanEffectDesign()
+  # y.me ...... emulated mean output at points in X.me
+  # reps ...... Number of repeated points at each subdivision
+  #             of the parameters
+  # ndp ......... Number of subdivisions of each parameter
+
+  # Output
+  # mean.effect.var is the variance of the mean effect, a
+  # summary of the mean impact of input [i] on the output
+  # taken across other parameter perturbations
+  # mean.effect.mat is a matrix with the mean effect of parameter [i]
+  # in each column [i]
+
+
+  reps.mat = matrix(y.me, ncol = reps, byrow = TRUE)
+  
+  reps.mean = apply(reps.mat,1, mean)
+
+  mean.effect.mat = matrix(reps.mean, nrow = ndp, byrow = FALSE)
+
+  mean.effect.var = apply(mean.effect.mat, 2, var)
+
+  
+  return(list(mean.effect.var = mean.effect.var,
+              mean.effect.mat = mean.effect.mat)
+         )
+}
+
 
   
 stop()
