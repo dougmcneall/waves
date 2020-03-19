@@ -219,7 +219,8 @@ add.nroy.design.points = function(X, Y, Y.target, n.aug,
   nroy.tf = apply(impl.mat, 1, FUN = all.bt, thres = thres)
   nroy.ix = which(nroy.tf==TRUE)
   X.nroy = X.aug[nroy.ix, ]
-  
+
+  # I think this code was wrong
   X.nroy.max = apply(X.nroy, 2, max)
   X.nroy.min = apply(X.nroy, 2, min)
   
@@ -248,8 +249,6 @@ wave1 = add.nroy.design.points(X = X,
                                obs.sd.list = obs.sd.list)
 
 # Exclude any design points outside of the ranges returned as NROY
-
-
 
 WithinRange = function(x, maxes, mins){
   # which elements of a vector are between
