@@ -1,0 +1,239 @@
+---
+title: "hmwave_demo_0"
+output:
+  html_document:
+    df_print: paged
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+## History matching waves demonstration  
+
+History matching process (for each separate output):  
+
+generate initial design  
+generate a target point  
+generate a uniform sample (for visulasation and calculating space sizes)  
+
+for each output:  
+   - run the model at the design points  
+   - run the model at the target point  
+   - fit a dicekriging km() to each output  
+   - calculate the implausibility of each point in the uniform sample  
+   - calculate the implausibility of each point in the augmented lhs  
+   - return the model fit and some fit statistics, both sets of implausibility calculations, and the new design
+
+```{r}
+
+library(lhs)
+library(DiceKriging)
+source('https://raw.githubusercontent.com/dougmcneall/packages-git/5f79ffe749f25c6fc39f4f7925e1538d36b7caf1/emtools.R')
+source('https://raw.githubusercontent.com/dougmcneall/packages-git/5f79ffe749f25c6fc39f4f7925e1538d36b7caf1/imptools.R')
+source('https://raw.githubusercontent.com/dougmcneall/packages-git/5f79ffe749f25c6fc39f4f7925e1538d36b7caf1/vistools.R')
+
+source('hmwave_demo_0.fun.R')
+```
+
+### Test functions from the [Virtual Library of Simulation Experiments](https://www.sfu.ca/~ssurjano/)  
+These are combined together to make multivariate output. The key is that all the functions use all four
+inputs, and each one produces a single deterministic output.
+
+## Run the model a large number of times and visualise the output here.
+
+### initial design  
+Set up an initial design, sampling sparsely from the input domain (as if the model was expensive to run)
+
+```{r}
+n = 10 # number of initial design points
+k = 4  # number of model inputs
+d = 3  # number of model outputs
+
+# simplest method is to choose a subset of the discovered NROY
+# points to append to the design
+
+n.app = 10 # number of points to append
+
+X = maximinLHS(n, k = k,dup = 2)
+colnames(X) <- c('x1', 'x2', 'x3', 'x4')
+
+X.target = matrix(runif(4), nrow = 1)
+
+# run the model outside of the function
+#Y = run.model(X)
+#Y.target = run.model(X.target)
+
+Y.raw = run.model(X)
+Y.target.raw = run.model(X.target)
+
+Y.all.norm = normalize(rbind(Y.raw, Y.target.raw))
+Y = Y.all.norm[1:n, ]
+Y.target = matrix(Y.all.norm[n+1, ], nrow = 1)
+
+# Will need to redo the uncertainty measures for the normalised output
+# The standard deviation of the model output is approximately [5,5,1] and the
+# mean is around [12,8,2]
+
+# Assume the entire uncertainty budget is in the observational uncertainty initially
+obs.sd.list = list(0.013,0.013,0.05)
+disc.list = list(0,0,0) 
+disc.sd.list = list(0, 0, 0) 
+
+thres = 3   # implausibility threshold
+
+mins.aug = rep(0,4)
+maxes.aug = rep(1,4)
+
+# Improvements to the above function from Andrianakis et al. (2015)
+# 1) Reduce the range the emulator is fit over, as the waves continue.
+# 2) Sample candidate design points from NEAR the existing NROY design points.
+```
+
+## Do the History matching in 6 waves
+
+```{r}
+wave1 = add.nroy.design.points(X = X, 
+                               Y = Y, 
+                               Y.target = Y.target,
+                               n.aug = 50000, 
+                               mins.aug = mins.aug,
+                               maxes.aug = maxes.aug,
+                               thres = 3,
+                               disc.list=disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+# Exclude any design points outside of the ranges returned as NROY
+
+
+
+keep1.ix = which(apply(X, FUN = WithinRange,1,
+                      maxes = wave1$X.nroy.max,
+                      mins = wave1$X.nroy.min))
+
+X2 = rbind(X[keep1.ix, ] , ChooseMaximinNroy(n.app = n.app, waveobj=wave1, nreps = 10000))
+Y2.raw = run.model(X2)
+Y2 = normalize(Y2.raw, wrt = Y.raw)
+
+wave2 = add.nroy.design.points(X = X2,
+                               Y = Y2, 
+                               Y.target = Y.target,
+                               n.aug = 30000,
+                               mins.aug = wave1$X.nroy.min,
+                               maxes.aug = wave1$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+keep2.ix = which(apply(X2, FUN = WithinRange,1,
+                       maxes = wave2$X.nroy.max,
+                       mins = wave2$X.nroy.min))
+
+X3 = rbind(X2[keep2.ix, ], ChooseMaximinNroy(n.app = n.app, waveobj=wave2, nreps = 10000))
+
+Y3.raw = run.model(X3)
+Y3 = normalize(Y3.raw, wrt = Y.raw)
+
+wave3 = add.nroy.design.points(X = X3, 
+                               Y = Y3,
+                               Y.target = Y.target,
+                               n.aug = 20000,
+                               mins.aug = wave2$X.nroy.min,
+                               maxes.aug = wave2$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+keep3.ix = which(apply(X3, FUN = WithinRange,1,
+                       maxes = wave3$X.nroy.max,
+                       mins = wave3$X.nroy.min))
+
+X4 = rbind(X3[keep3.ix, ],
+           ChooseMaximinNroy(n.app = n.app, waveobj=wave3, nreps = 10000))
+
+Y4.raw = run.model(X4)
+Y4 = normalize(Y4.raw, wrt = Y.raw)
+
+wave4 = add.nroy.design.points(X = X4, 
+                               Y = Y4,
+                               Y.target = Y.target,
+                               n.aug = 20000,
+                               mins.aug = wave3$X.nroy.min,
+                               maxes.aug = wave3$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+keep4.ix = which(apply(X4, FUN = WithinRange,1,
+                       maxes = wave4$X.nroy.max,
+                       mins = wave4$X.nroy.min))
+
+X5 = rbind(X4[keep4.ix, ],
+           ChooseMaximinNroy(n.app = n.app, waveobj=wave4, nreps = 10000))
+
+Y5.raw = run.model(X5)
+Y5 = normalize(Y5.raw, wrt = Y.raw)
+
+
+wave5 = add.nroy.design.points(X = X5,
+                               Y = Y5,
+                               Y.target = Y.target,
+                               n.aug = 20000, 
+                               mins.aug = wave4$X.nroy.min,
+                               maxes.aug = wave4$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+keep5.ix = which(apply(X5, FUN = WithinRange,1,
+                       maxes = wave5$X.nroy.max,
+                       mins = wave5$X.nroy.min))
+
+X6 = rbind(X5[keep5.ix, ], ChooseMaximinNroy(n.app = n.app, waveobj=wave5, nreps = 10000))
+
+Y6.raw = run.model(X6)
+Y6 = normalize(Y6.raw, wrt = Y.raw)
+
+
+wave6 = add.nroy.design.points(X = X6,
+                               Y = Y6,
+                               Y.target = Y.target, 
+                               n.aug = 20000, 
+                               mins.aug = wave5$X.nroy.min,
+                               maxes.aug = wave5$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+```
+
+### Visualize the results
+```{r fig.width=8, fig.height=8}
+all.nroy = rbind(wave1$X.nroy, wave2$X.nroy, wave3$X.nroy, wave4$X.nroy, wave5$X.nroy, wave6$X.nroy, X.target)
+
+cols = c(rep('black',nrow(wave1$X.nroy)), 
+         rep('red',nrow(wave2$X.nroy)),
+         rep('purple',nrow(wave3$X.nroy)),
+         rep('green',nrow(wave4$X.nroy)),
+         rep('grey',nrow(wave5$X.nroy)),
+         rep('blue',nrow(wave6$X.nroy)),
+          rep('gold', 1)
+         
+)
+cex = c(rep(1, nrow(all.nroy)-1), 2)
+  
+pairs(all.nroy, xlim = c(0,1), ylim = c(0,1), col = cols, cex = cex)
+```
+
+
