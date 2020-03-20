@@ -98,7 +98,7 @@ maxes.aug = rep(1,4)
 
 ## Do the History matching in 6 waves
 
-```{r}
+```{r, message = FALSE, results='hide'}
 wave1 = add.nroy.design.points(X = X, 
                                Y = Y, 
                                Y.target = Y.target,
@@ -222,18 +222,20 @@ wave6 = add.nroy.design.points(X = X6,
 ```{r fig.width=8, fig.height=8}
 all.nroy = rbind(wave1$X.nroy, wave2$X.nroy, wave3$X.nroy, wave4$X.nroy, wave5$X.nroy, wave6$X.nroy, X.target)
 
-cols = c(rep('black',nrow(wave1$X.nroy)), 
-         rep('red',nrow(wave2$X.nroy)),
-         rep('purple',nrow(wave3$X.nroy)),
-         rep('green',nrow(wave4$X.nroy)),
-         rep('grey',nrow(wave5$X.nroy)),
-         rep('blue',nrow(wave6$X.nroy)),
+transp = 50
+
+cols = c(rep(makeTransparent('black',transp),nrow(wave1$X.nroy)), 
+         rep(makeTransparent('red',transp),nrow(wave2$X.nroy)),
+         rep(makeTransparent('purple',transp),nrow(wave3$X.nroy)),
+         rep(makeTransparent('green', transp),nrow(wave4$X.nroy)),
+         rep(makeTransparent('grey', transp),nrow(wave5$X.nroy)),
+         rep(makeTransparent('blue',transp),nrow(wave6$X.nroy)),
           rep('gold', 1)
          
 )
 cex = c(rep(1, nrow(all.nroy)-1), 2)
   
-pairs(all.nroy, xlim = c(0,1), ylim = c(0,1), col = cols, cex = cex)
+pairs(all.nroy, xlim = c(0,1), ylim = c(0,1), col = cols, cex = cex, pch = 21)
 ```
 
 
