@@ -48,8 +48,10 @@ inputs, and each one produces a single deterministic output.
 
 ## Run the model a large number of times and visualise the output here.
 
+
 ### initial design  
-Set up an initial design, sampling sparsely from the input domain (as if the model was expensive to run)
+Set up an initial design, sampling sparsely from the input domain (as if the model was expensive to run).  
+Experiment with n (initial design points), n.app (number of points to augment the design with in each wave), and uncertainty budget.
 
 ```{r}
 n = 10 # number of initial design points
@@ -70,19 +72,86 @@ X.target = matrix(runif(4), nrow = 1)
 #Y = run.model(X)
 #Y.target = run.model(X.target)
 
+
 Y.raw = run.model(X)
+# Mean and standard deviation of the raw output
+
+print(c('Output mean = ', c(round(apply(Y.raw ,2, mean),2))))
+
+print(c('Output SD = ', round(apply(Y.raw,2,sd),2)))
+
 Y.target.raw = run.model(X.target)
+
+print(c('Output target = ', round(Y.target.raw),2))
+
 
 Y.all.norm = normalize(rbind(Y.raw, Y.target.raw))
 Y = Y.all.norm[1:n, ]
 Y.target = matrix(Y.all.norm[n+1, ], nrow = 1)
 
-# Will need to redo the uncertainty measures for the normalised output
+print(c('Normalised output mean = ', round(apply(Y.all.norm ,2, mean),2)))
+print(c('Normalised output SD = ', round(apply(Y.all.norm,2,sd),2)))
+print(c('Output target = ', round(Y.target,2)))
+
+
 # The standard deviation of the model output is approximately [5,5,1] and the
 # mean is around [12,8,2]
 
+# With a small number of design points, the target is often at one of the margins of the normalised space
+```
+
+
+```{r, fig.width=7, fig.height=7}
+
+n.sens = 21
+X.oaat = oaat.design(X, n.sens, hold = X.target)
+Y.oaat = run.model(X.oaat)
+linecols = c('black', 'red', 'blue')
+
+#linecols.ext = c('black', paired)
+ylim = c(0,1)
+xlim = c(0,1)
+
+par(mfrow = c(2,2), mar = c(4,4,2,1), oma = c(0.5,0.5, 3, 0.5))
+ndat = ncol(Y.oaat)
+d = ncol(X.oaat)
+for(i in 1:d){
+  ix = seq(from = ((i*n.sens) - (n.sens-1)), to =  (i*n.sens), by = 1)
+  plot(X.oaat[ix,i], Y.oaat[ix,2],
+       type = 'n',
+       ylab= '', axes = FALSE,
+       main = '',
+       xlab = '',
+       xlim = c(0,1), ylim = c(0,20))
+  
+  for(j in 1:ndat){
+
+    y.oaat = Y.oaat[ix,j]
+    lines(X.oaat[ix,i],y.oaat, col = linecols[j], lwd = 2) 
+  }
+  axis(1, col = 'grey', col.axis = 'grey', las = 1, title = 'X')
+  axis(2, col = 'grey', col.axis = 'grey', las = 1)
+ # mtext(3, text = colnames(lhs)[i], line = 0.2, cex = 0.7)  
+}
+#reset()
+#legend('top',
+#       legend = colnames(dat.norm), 
+#       col = linecols.ext,
+#       cex = 0.8,
+#       lwd = 2,
+#       horiz = TRUE)
+#dev.off()
+
+
+
+
+```
+
+
+
+```{r}
 # Assume the entire uncertainty budget is in the observational uncertainty initially
-obs.sd.list = list(0.013,0.013,0.05)
+obs.sd.list = list(0.013,0.013,0.013)
 disc.list = list(0,0,0) 
 disc.sd.list = list(0, 0, 0) 
 
@@ -102,7 +171,7 @@ maxes.aug = rep(1,4)
 wave1 = add.nroy.design.points(X = X, 
                                Y = Y, 
                                Y.target = Y.target,
-                               n.aug = 50000, 
+                               n.aug = 100000, 
                                mins.aug = mins.aug,
                                maxes.aug = maxes.aug,
                                thres = 3,
@@ -111,7 +180,6 @@ wave1 = add.nroy.design.points(X = X,
                                obs.sd.list = obs.sd.list)
 
 # Exclude any design points outside of the ranges returned as NROY
-
 
 
 keep1.ix = which(apply(X, FUN = WithinRange,1,
@@ -125,7 +193,7 @@ Y2 = normalize(Y2.raw, wrt = Y.raw)
 wave2 = add.nroy.design.points(X = X2,
                                Y = Y2, 
                                Y.target = Y.target,
-                               n.aug = 30000,
+                               n.aug = 50000,
                                mins.aug = wave1$X.nroy.min,
                                maxes.aug = wave1$X.nroy.max,
                                thres = 3,
@@ -145,7 +213,7 @@ Y3 = normalize(Y3.raw, wrt = Y.raw)
 wave3 = add.nroy.design.points(X = X3, 
                                Y = Y3,
                                Y.target = Y.target,
-                               n.aug = 20000,
+                               n.aug = 50000,
                                mins.aug = wave2$X.nroy.min,
                                maxes.aug = wave2$X.nroy.max,
                                thres = 3,
@@ -166,7 +234,7 @@ Y4 = normalize(Y4.raw, wrt = Y.raw)
 wave4 = add.nroy.design.points(X = X4, 
                                Y = Y4,
                                Y.target = Y.target,
-                               n.aug = 20000,
+                               n.aug = 30000,
                                mins.aug = wave3$X.nroy.min,
                                maxes.aug = wave3$X.nroy.max,
                                thres = 3,
@@ -188,7 +256,7 @@ Y5 = normalize(Y5.raw, wrt = Y.raw)
 wave5 = add.nroy.design.points(X = X5,
                                Y = Y5,
                                Y.target = Y.target,
-                               n.aug = 20000, 
+                               n.aug = 30000, 
                                mins.aug = wave4$X.nroy.min,
                                maxes.aug = wave4$X.nroy.max,
                                thres = 3,
@@ -209,7 +277,7 @@ Y6 = normalize(Y6.raw, wrt = Y.raw)
 wave6 = add.nroy.design.points(X = X6,
                                Y = Y6,
                                Y.target = Y.target, 
-                               n.aug = 20000, 
+                               n.aug = 30000, 
                                mins.aug = wave5$X.nroy.min,
                                maxes.aug = wave5$X.nroy.max,
                                thres = 3,
@@ -222,7 +290,7 @@ wave6 = add.nroy.design.points(X = X6,
 ```{r fig.width=8, fig.height=8}
 all.nroy = rbind(wave1$X.nroy, wave2$X.nroy, wave3$X.nroy, wave4$X.nroy, wave5$X.nroy, wave6$X.nroy, X.target)
 
-transp = 50
+transp = 100
 
 cols = c(rep(makeTransparent('black',transp),nrow(wave1$X.nroy)), 
          rep(makeTransparent('red',transp),nrow(wave2$X.nroy)),
@@ -237,5 +305,27 @@ cex = c(rep(1, nrow(all.nroy)-1), 2)
   
 pairs(all.nroy, xlim = c(0,1), ylim = c(0,1), col = cols, cex = cex, pch = 21)
 ```
+
+How much does the volume of input space reduce with each wave?  
+Very often we find no real gain (or even a degradation) after the first 3 waves.
+```{r}
+waves_list = list(wave1, wave2, wave3, wave4 ,wave5, wave6)
+
+GetNroyProp = function(waveobj){
+  nrow(waveobj$X.nroy) / nrow(waveobj$X.aug)
+}
+
+wave.prop = lapply(waves_list, FUN = GetNroyProp)
+
+par(las = 1)
+plot(1:length(waves_list), c(wave.prop, recursive = TRUE) * 100, type = 'b',
+     xlab = 'Wave', ylab = 'NROY proportion (%)')
+
+
+
+```
+
+
+
 
 
