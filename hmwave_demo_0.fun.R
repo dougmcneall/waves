@@ -175,6 +175,12 @@ makeTransparent = function(someColor, alpha=100)
                                               blue=curcoldata[3],alpha=alpha, maxColorValue=255)})
 }
 
+reset <- function() {
+  # Allows annotation of graphs, resets axes
+  par(mfrow=c(1, 1), oma=rep(0, 4), mar=rep(0, 4), new=TRUE)
+  plot(0:1, 0:1, type="n", xlab="", ylab="", axes=FALSE)
+}
+
 
 
 

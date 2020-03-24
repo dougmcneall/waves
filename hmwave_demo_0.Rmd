@@ -100,6 +100,8 @@ print(c('Output target = ', round(Y.target,2)))
 # With a small number of design points, the target is often at one of the margins of the normalised space
 ```
 
+### Model output
+The model input is 4 dimensional and output is 3 dimensional, which is hard to visualise. This is what happens when you can run the model as many times as you like, and vary the inputs one-at-a-time.
 
 ```{r, fig.width=7, fig.height=7}
 
@@ -108,7 +110,7 @@ X.oaat = oaat.design(X, n.sens, hold = X.target)
 Y.oaat = run.model(X.oaat)
 linecols = c('black', 'red', 'blue')
 
-#linecols.ext = c('black', paired)
+
 ylim = c(0,1)
 xlim = c(0,1)
 
@@ -119,9 +121,9 @@ for(i in 1:d){
   ix = seq(from = ((i*n.sens) - (n.sens-1)), to =  (i*n.sens), by = 1)
   plot(X.oaat[ix,i], Y.oaat[ix,2],
        type = 'n',
-       ylab= '', axes = FALSE,
+       ylab= 'Y', axes = FALSE,
        main = '',
-       xlab = '',
+       xlab = paste0('X',i),
        xlim = c(0,1), ylim = c(0,20))
   
   for(j in 1:ndat){
@@ -133,13 +135,13 @@ for(i in 1:d){
   axis(2, col = 'grey', col.axis = 'grey', las = 1)
  # mtext(3, text = colnames(lhs)[i], line = 0.2, cex = 0.7)  
 }
-#reset()
-#legend('top',
-#       legend = colnames(dat.norm), 
-#       col = linecols.ext,
-#       cex = 0.8,
-#       lwd = 2,
-#       horiz = TRUE)
+reset()
+legend('top',
+       legend = colnames(Y), 
+       col = linecols,
+       cex = 0.8,
+       lwd = 2,
+       horiz = TRUE)
 #dev.off()
 
 
@@ -308,6 +310,9 @@ pairs(all.nroy, xlim = c(0,1), ylim = c(0,1), col = cols, cex = cex, pch = 21)
 
 How much does the volume of input space reduce with each wave?  
 Very often we find no real gain (or even a degradation) after the first 3 waves.
+
+This last bit isn't right - I think the function draws from a smaller space each time so It's not a fair comparison.
+Need a function that estimates the NROY proportion from the initial space - probably using importance sampling. Check other HM papers to see how this is done.
 ```{r}
 waves_list = list(wave1, wave2, wave3, wave4 ,wave5, wave6)
 
