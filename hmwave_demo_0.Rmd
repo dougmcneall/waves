@@ -5,23 +5,13 @@ output:
     df_print: paged
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
-
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
-
-## History matching waves demonstration  
+# History matching a toy model in waves 
 
 History matching process (for each separate output):  
 
-generate initial design  
-generate a target point  
-generate a uniform sample (for visulasation and calculating space sizes)  
+1. generate initial design  
+2. generate a target point  
+3. generate a uniform sample (for visulasation and calculating space sizes)  
 
 for each output:  
    - run the model at the design points  
@@ -31,6 +21,8 @@ for each output:
    - calculate the implausibility of each point in the augmented lhs  
    - return the model fit and some fit statistics, both sets of implausibility calculations, and the new design
 
+
+## Load packages and helper functions
 ```{r}
 
 library(lhs)
@@ -42,11 +34,6 @@ source('https://raw.githubusercontent.com/dougmcneall/packages-git/5f79ffe749f25
 source('hmwave_demo_0.fun.R')
 ```
 
-### Test functions from the [Virtual Library of Simulation Experiments](https://www.sfu.ca/~ssurjano/)  
-These are combined together to make multivariate output. The key is that all the functions use all four
-inputs, and each one produces a single deterministic output.
-
-## Run the model a large number of times and visualise the output here.
 
 
 ### initial design  
@@ -66,12 +53,21 @@ n.app = 10 # number of points to append
 X = maximinLHS(n, k = k,dup = 2)
 colnames(X) <- c('x1', 'x2', 'x3', 'x4')
 
-X.target = matrix(runif(4), nrow = 1)
+#X.target = matrix(runif(4), nrow = 1) # uncomment this and comment the next line for a random target input.
+X.target = matrix(rep(0.5,4), nrow = 1)
 
 # run the model outside of the function
 #Y = run.model(X)
 #Y.target = run.model(X.target)
 
+```
+
+## Run the toy model
+
+Three test functions from the [Virtual Library of Simulation Experiments](https://www.sfu.ca/~ssurjano/) are combined together to make multivariate output. The key is that all the functions use all four inputs in different ways, and each model produces a single deterministic output.
+
+
+```{r}
 
 Y.raw = run.model(X)
 # Mean and standard deviation of the raw output
@@ -153,7 +149,8 @@ legend('top',
 
 ```{r}
 # Assume the entire uncertainty budget is in the observational uncertainty initially
-obs.sd.list = list(0.013,0.013,0.013)
+#obs.sd.list = list(0.013,0.013,0.013)
+obs.sd.list = list(0.01,0.01,0.01)
 disc.list = list(0,0,0) 
 disc.sd.list = list(0, 0, 0) 
 
@@ -169,7 +166,11 @@ maxes.aug = rep(1,4)
 
 ## Do the History matching in 6 waves
 
-```{r, message = FALSE, results='hide'}
+```{r message=FALSE, results='hide'}
+
+# This function augments the original design with points that are 
+# found to be NROY using the emulator. It samples uniformly across the original space,
+# and then keeps n.aug points.
 wave1 = add.nroy.design.points(X = X, 
                                Y = Y, 
                                Y.target = Y.target,
@@ -181,15 +182,21 @@ wave1 = add.nroy.design.points(X = X,
                                disc.sd.list = disc.sd.list,
                                obs.sd.list = obs.sd.list)
 
-# Exclude any design points outside of the ranges returned as NROY
-
-
+# This part excludes any original design points outside of the ranges returned as NROY by
+# add.nroy.design.points. This shrinks down the domain that the emulator
+# is fit over.
 keep1.ix = which(apply(X, FUN = WithinRange,1,
                       maxes = wave1$X.nroy.max,
                       mins = wave1$X.nroy.min))
 
+# This part takes the n.aug points found to be NROY, and chooses n.app of them that are found to be
+# furthest apart. These are appended to the design points that are inside the marginal NROY ranges. 
 X2 = rbind(X[keep1.ix, ] , ChooseMaximinNroy(n.app = n.app, waveobj=wave1, nreps = 10000))
+
+# Run the model at the new design
 Y2.raw = run.model(X2)
+
+# Normalise with respect to the original output.
 Y2 = normalize(Y2.raw, wrt = Y.raw)
 
 wave2 = add.nroy.design.points(X = X2,
@@ -288,6 +295,25 @@ wave6 = add.nroy.design.points(X = X6,
                                obs.sd.list = obs.sd.list)
 ```
 
+Idea: plot the design points in different colours
+
+
+```{r, fig.width = 8, fig.height = 8}
+allX = rbind(X, X2, X3, X4, X5, X6)
+transp = 200
+
+allX.cols = c(rep(makeTransparent('black',transp),nrow(X)), 
+         rep(makeTransparent('red',transp),nrow(X2)),
+        rep(makeTransparent('purple',transp),nrow(X3)),
+        rep(makeTransparent('green', transp),nrow(X4)),
+       rep(makeTransparent('grey', transp),nrow(X5)), 
+       rep(makeTransparent('blue',transp),nrow(X6)))
+
+pairs(allX, xlim = c(0,1), ylim = c(0,1), col = allX.cols, cex = 1, pch = 19)
+
+```
+
+
 ### Visualize the results
 ```{r fig.width=8, fig.height=8}
 all.nroy = rbind(wave1$X.nroy, wave2$X.nroy, wave3$X.nroy, wave4$X.nroy, wave5$X.nroy, wave6$X.nroy, X.target)
@@ -313,6 +339,8 @@ Very often we find no real gain (or even a degradation) after the first 3 waves.
 
 This last bit isn't right - I think the function draws from a smaller space each time so It's not a fair comparison.
 Need a function that estimates the NROY proportion from the initial space - probably using importance sampling. Check other HM papers to see how this is done.
+
+If each wave was a perfect subset, I think you could just multiply the NROY fractions together as you go.
 ```{r}
 waves_list = list(wave1, wave2, wave3, wave4 ,wave5, wave6)
 
@@ -331,6 +359,43 @@ plot(1:length(waves_list), c(wave.prop, recursive = TRUE) * 100, type = 'b',
 ```
 
 
+```{r, message=FALSE,warning=FALSE}
+# What is the implausibility of the genuine point? 
+# Apply this over the waves and see how it moves about
 
+target.impl.mat = matrix(ncol = ncol(Y), nrow = length(waves_list))
+colnames(target.impl.mat) <- colnames(Y)
+
+for(j in 1:length(waves_list)){
+  
+ waveobj = waves_list[[j]]
+ 
+ X.target.pred.list = lapply(waveobj$fit.list, FUN = 'predict', newdata =matrix(X.target, nrow = 1), type = 'UK')
+  
+  impl.row= NULL
+  for(i in 1:length(X.target.pred.list)){
+    
+    pred.impl = impl(em = X.target.pred.list[[i]]$mean,
+                     em.sd = X.target.pred.list[[i]]$sd,
+                     disc = disc.list[[i]],
+                     disc.sd = disc.sd.list[[i]],
+                     obs = Y.target[[i]],
+                     obs.sd = obs.sd.list[[i]])
+    
+    impl.row = cbind(impl.row, pred.impl)
+  }
+  
+  target.impl.mat[j, ] = impl.row
+  
+}
+
+par(las = 1)
+matplot(target.impl.mat, type = 'l', lty = 'solid', xlab = 'Wave', ylab = 'Implausibility',
+        col = c('black', 'red', 'blue'), main = 'implausibility of target input')
+abline(h = 3, lty = 'dashed', col = 'grey')
+legend('topleft', legend = c('y1','y2','y3'),lty = 'solid', col = c('black', 'red', 'blue'))
+
+```
+This is the implausibility of the (hidden) target input, as estimated by the emulator, through the waves. If the implausibility goes over the threshold (usually 3) at any point, something has gone wrong. It means your target point is being ruled out.
 
 

@@ -166,6 +166,10 @@ WithinRange = function(x, maxes, mins){
 }
 
 
+# -----------------------------------------------------------------------------------------
+# Plotting functions
+#
+# -----------------------------------------------------------------------------------------
 
 makeTransparent = function(someColor, alpha=100)
   # Transparent colours for plotting

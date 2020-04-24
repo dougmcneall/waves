@@ -1,0 +1,341 @@
+---
+title: "hmwave_demo_1
+output: html_notebook
+---
+
+
+## Load packages and helper functions
+```{r}
+
+library(lhs)
+library(DiceKriging)
+source('https://raw.githubusercontent.com/dougmcneall/packages-git/5f79ffe749f25c6fc39f4f7925e1538d36b7caf1/emtools.R')
+source('https://raw.githubusercontent.com/dougmcneall/packages-git/5f79ffe749f25c6fc39f4f7925e1538d36b7caf1/imptools.R')
+source('https://raw.githubusercontent.com/dougmcneall/packages-git/5f79ffe749f25c6fc39f4f7925e1538d36b7caf1/vistools.R')
+
+source('hmwave_demo_0.fun.R')
+```
+
+
+
+### initial design  
+Set up an initial design, sampling sparsely from the input domain (as if the model was expensive to run).  
+Experiment with n (initial design points), n.app (number of points to augment the design with in each wave), and uncertainty budget.
+
+```{r}
+n = 10 # number of initial design points
+k = 4  # number of model inputs
+d = 3  # number of model outputs
+
+# simplest method is to choose a subset of the discovered NROY
+# points to append to the design
+
+n.app = 10 # number of points to append
+
+X = maximinLHS(n, k = k,dup = 2)
+colnames(X) <- c('x1', 'x2', 'x3', 'x4')
+
+#X.target = matrix(runif(4), nrow = 1) # uncomment this and comment the next line for a random target input.
+X.target = matrix(rep(0.5,4), nrow = 1)
+
+# run the model outside of the function
+#Y = run.model(X)
+#Y.target = run.model(X.target)
+
+```
+
+
+```{r}
+
+Y.raw = run.model(X)
+Y.target.raw = run.model(X.target)
+
+Y.all.norm = normalize(rbind(Y.raw, Y.target.raw))
+Y = Y.all.norm[1:n, ]
+Y.target = matrix(Y.all.norm[n+1, ], nrow = 1)
+```
+
+
+```{r}
+# Assume the entire uncertainty budget is in the observational uncertainty initially
+#obs.sd.list = list(0.013,0.013,0.013)
+obs.sd.list = list(0.01,0.01,0.01)
+disc.list = list(0,0,0) 
+disc.sd.list = list(0, 0, 0) 
+
+thres = 3   # implausibility threshold
+
+mins.aug = rep(0,4)
+maxes.aug = rep(1,4)
+
+# Improvements to the above function from Andrianakis et al. (2015)
+# 1) Reduce the range the emulator is fit over, as the waves continue.
+# 2) Sample candidate design points from NEAR the existing NROY design points.
+```
+
+
+```{r}
+
+loopAddDesignPoint = function(X, 
+                              Y, 
+                              Y.target, 
+                              n.aug,
+                              mins.aug,
+                              maxes.aug,
+                              thres = 3, 
+                              disc.list,
+                              disc.sd.list,
+                              obs.sd.list,
+                              waves = 3, 
+                              shrink = TRUE){
+  
+  
+  wavelist = vector(mode='list', length = waves)
+  designlist  = vector(mode='list', length = waves)
+  
+  for(i in 1:waves){
+    
+    wave = add.nroy.design.points(X = X, 
+                                  Y = Y, 
+                                  Y.target = Y.target,
+                                  n.aug = n.aug, 
+                                  mins.aug = mins.aug,
+                                  maxes.aug = maxes.aug,
+                                  thres = thres,
+                                  disc.list=disc.list,
+                                  disc.sd.list = disc.sd.list,
+                                  obs.sd.list = obs.sd.list)
+    
+    # This part excludes any original design points outside of the ranges returned as NROY by
+    # add.nroy.design.points. This shrinks down the domain that the emulator
+    # is fit over.
+    if(shrink){
+      keep.ix = which(apply(X, FUN = WithinRange,1,
+                             maxes = wave1$X.nroy.max,
+                             mins = wave1$X.nroy.min))
+      
+      # This part takes the n.aug points found to be NROY, and chooses n.app of them that are found to be
+      # furthest apart. These are appended to the design points that are inside the marginal NROY ranges. 
+      Xnew = rbind(X[keep.ix, ] , ChooseMaximinNroy(n.app = n.app, waveobj=wave1, nreps = 10000))
+      
+    }
+    
+    else{
+      Xnew = rbind(X, ChooseMaximinNroy(n.app = n.app, waveobj = wave, nreps = 10000) )
+    }
+    
+    # Run the model at the new design
+    Ynew.raw = run.model(Xnew)
+    
+    # Normalise with respect to the original output.
+    Ynew = normalize(Ynew.raw, wrt = Ynew.raw)
+    
+    X = Xnew
+    Y = Ynew
+    
+    wavelist[[i]] = wave
+    #designlist[i]$X = X
+    #designlist[i]$Y = Y
+    
+    
+  }
+  
+  return(wavelist)
+}
+```
+
+
+```{r}
+
+test = loopAddDesignPoint (X = X, 
+                               Y = Y, 
+                               Y.target = Y.target,
+                               n.aug = 100000, 
+                               mins.aug = mins.aug,
+                               maxes.aug = maxes.aug,
+                               thres = 3,
+                               disc.list=disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list,
+                           waves = 6,
+                           shrink = TRUE
+)
+
+
+```
+
+
+```{r}
+
+test$wave[1]$X.nroy
+
+
+```
+
+```{r}
+all.nroy = rbind(wave1$X.nroy, wave2$X.nroy, wave3$X.nroy, wave4$X.nroy, wave5$X.nroy, wave6$X.nroy, X.target)
+
+transp = 100
+
+cols = c(rep(makeTransparent('black',transp),nrow(wave1$X.nroy)), 
+         rep(makeTransparent('red',transp),nrow(wave2$X.nroy)),
+         rep(makeTransparent('purple',transp),nrow(wave3$X.nroy)),
+         rep(makeTransparent('green', transp),nrow(wave4$X.nroy)),
+         rep(makeTransparent('grey', transp),nrow(wave5$X.nroy)),
+         rep(makeTransparent('blue',transp),nrow(wave6$X.nroy)),
+          rep('gold', 1)
+         
+)
+cex = c(rep(1, nrow(all.nroy)-1), 2)
+  
+pairs(all.nroy, xlim = c(0,1), ylim = c(0,1), col = cols, cex = cex, pch = 21)
+```
+
+
+```{r}
+
+GetNroyProp = function(waveobj){
+  nrow(waveobj$X.nroy) / nrow(waveobj$X.aug)
+}
+
+wave.prop = lapply(test, FUN = GetNroyProp)
+
+par(las = 1)
+plot(1:length(test), c(wave.prop, recursive = TRUE) * 100, type = 'b',
+     xlab = 'Wave', ylab = 'NROY proportion (%)')
+
+
+```
+
+
+
+```{r message=FALSE, results='hide'}
+
+# This function augments the original design with points that are 
+# found to be NROY using the emulator. It samples uniformly across the original space,
+# and then keeps n.aug points.
+wave1 = add.nroy.design.points(X = X, 
+                               Y = Y, 
+                               Y.target = Y.target,
+                               n.aug = 100000, 
+                               mins.aug = mins.aug,
+                               maxes.aug = maxes.aug,
+                               thres = 3,
+                               disc.list=disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+# This part excludes any original design points outside of the ranges returned as NROY by
+# add.nroy.design.points. This shrinks down the domain that the emulator
+# is fit over.
+keep1.ix = which(apply(X, FUN = WithinRange,1,
+                      maxes = wave1$X.nroy.max,
+                      mins = wave1$X.nroy.min))
+
+# This part takes the n.aug points found to be NROY, and chooses n.app of them that are found to be
+# furthest apart. These are appended to the design points that are inside the marginal NROY ranges. 
+X2 = rbind(X[keep1.ix, ] , ChooseMaximinNroy(n.app = n.app, waveobj=wave1, nreps = 10000))
+
+# Run the model at the new design
+Y2.raw = run.model(X2)
+
+# Normalise with respect to the original output.
+Y2 = normalize(Y2.raw, wrt = Y.raw)
+
+wave2 = add.nroy.design.points(X = X2,
+                               Y = Y2, 
+                               Y.target = Y.target,
+                               n.aug = 50000,
+                               mins.aug = wave1$X.nroy.min,
+                               maxes.aug = wave1$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+keep2.ix = which(apply(X2, FUN = WithinRange,1,
+                       maxes = wave2$X.nroy.max,
+                       mins = wave2$X.nroy.min))
+
+X3 = rbind(X2[keep2.ix, ], ChooseMaximinNroy(n.app = n.app, waveobj=wave2, nreps = 10000))
+
+Y3.raw = run.model(X3)
+Y3 = normalize(Y3.raw, wrt = Y.raw)
+
+wave3 = add.nroy.design.points(X = X3, 
+                               Y = Y3,
+                               Y.target = Y.target,
+                               n.aug = 50000,
+                               mins.aug = wave2$X.nroy.min,
+                               maxes.aug = wave2$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+keep3.ix = which(apply(X3, FUN = WithinRange,1,
+                       maxes = wave3$X.nroy.max,
+                       mins = wave3$X.nroy.min))
+
+X4 = rbind(X3[keep3.ix, ],
+           ChooseMaximinNroy(n.app = n.app, waveobj=wave3, nreps = 10000))
+
+Y4.raw = run.model(X4)
+Y4 = normalize(Y4.raw, wrt = Y.raw)
+
+wave4 = add.nroy.design.points(X = X4, 
+                               Y = Y4,
+                               Y.target = Y.target,
+                               n.aug = 30000,
+                               mins.aug = wave3$X.nroy.min,
+                               maxes.aug = wave3$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+keep4.ix = which(apply(X4, FUN = WithinRange,1,
+                       maxes = wave4$X.nroy.max,
+                       mins = wave4$X.nroy.min))
+
+X5 = rbind(X4[keep4.ix, ],
+           ChooseMaximinNroy(n.app = n.app, waveobj=wave4, nreps = 10000))
+
+Y5.raw = run.model(X5)
+Y5 = normalize(Y5.raw, wrt = Y.raw)
+
+
+wave5 = add.nroy.design.points(X = X5,
+                               Y = Y5,
+                               Y.target = Y.target,
+                               n.aug = 30000, 
+                               mins.aug = wave4$X.nroy.min,
+                               maxes.aug = wave4$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+
+keep5.ix = which(apply(X5, FUN = WithinRange,1,
+                       maxes = wave5$X.nroy.max,
+                       mins = wave5$X.nroy.min))
+
+X6 = rbind(X5[keep5.ix, ], ChooseMaximinNroy(n.app = n.app, waveobj=wave5, nreps = 10000))
+
+Y6.raw = run.model(X6)
+Y6 = normalize(Y6.raw, wrt = Y.raw)
+
+
+wave6 = add.nroy.design.points(X = X6,
+                               Y = Y6,
+                               Y.target = Y.target, 
+                               n.aug = 30000, 
+                               mins.aug = wave5$X.nroy.min,
+                               maxes.aug = wave5$X.nroy.max,
+                               thres = 3,
+                               disc.list = disc.list,
+                               disc.sd.list = disc.sd.list,
+                               obs.sd.list = obs.sd.list)
+```
+
+
