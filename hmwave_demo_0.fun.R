@@ -1,6 +1,7 @@
 # Functions for hmwave_demo_0.Rmd
 # Helper functions, or individual processes within the overall framework.
 
+
 # Friedman
 friedman = function(x){
   
