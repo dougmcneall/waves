@@ -63,7 +63,8 @@ Y.target = matrix(Y.all.norm[n+1, ], nrow = 1)
 ```{r}
 # Assume the entire uncertainty budget is in the observational uncertainty initially
 #obs.sd.list = list(0.013,0.013,0.013)
-obs.sd.list = list(0.013,0.013,0.13)
+# at around 0.01, the HM breaks, putting the I of the target point above 3
+obs.sd.list = list(0.01,0.01,0.01)
 disc.list = list(0,0,0) 
 disc.sd.list = list(0, 0, 0) 
 
@@ -216,13 +217,6 @@ getEmulatorPostVar = function(waveobj){
 
 ```
 
-```{r}
-
-vtest = getEmulatorPostVar(wave1)
-```
-
-
-
 
 ```{r}
 
@@ -251,7 +245,7 @@ loopAddDesignPoint = function(X,
   
   for(i in 1:waves){
     
-    wave = add.nroy.design.points(X = X, 
+    wave = addNroyDesignPoints(X = X, 
                                   Y = Y, 
                                   Y.target = Y.target,
                                   n.aug = n.aug[i], 
@@ -326,6 +320,25 @@ test = loopAddDesignPoint (X = X,
 
 ```
 
+
+How does the emulator mean compare to the uncertainty of the observations?
+```{r}
+
+pv.mat = NULL
+
+for(i in 1:length(test$wavelist)){
+ 
+pv.mat =  rbind(pv.mat, getEmulatorPostVar(test$wavelist[[i]])$pv.mean )
+   
+}
+#pv.mat
+
+matplot(pv.mat, type = 'o', main = 'mean emulator posterior variance', 
+        col = c('black', 'red', 'blue'), log = 'y', lty = 'solid', pch = 19)
+
+abline(h = (unlist(obs.sd.list))^2, col = c('black', 'red', 'blue'), lty = 'dashed')
+
+```
 
 ```{r, fig.width = 8, fig.height = 8}
 
@@ -442,8 +455,6 @@ getNROYprop = function(waveobj){
 }
 
 nroy.prop = sapply(test$wavelist, getNROYprop)
-
-plot(nroy.prop*100, log = 'y')
 
 par(las = 1)
 plot(1:length(test$wavelist), nroy.prop * 100, type = 'b',
